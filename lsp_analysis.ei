@@ -1,0 +1,313 @@
+// lsp_analysis: the adapter between the server and the compiler. It is the only module that
+// imports the compiler package (deps/eiderc); everything else sees lsp_model.ei.
+//
+// Status: STAND-IN. The compiler's IDE entry point, `ide.analyze` (compiler/ide.ei, being
+// written), will give diagnostics, symbols, references and types in one call. Until it is on
+// eider-lang main, `analyze` below
+//
+//   1. runs the compiler's passes the way `eiderc check` does (compiler/main.ei): lex, parse,
+//      resolve.load, comptime evaluation, check.check_mode; each stops at its first error, so
+//      there is at most one diagnostic per analysis. A missing `main` (E0112 at 1:1, which the
+//      checker reports last) is dropped, so library modules aren't flagged. Notes on the
+//      passes: none of lex/parse/resolve/check exits the process; comptime evaluation
+//      (consteval.eval, only for files with `comptime` constants) builds and runs a program
+//      through driver.ei, and driver.fail exits the process when the toolchain can't be found
+//      (driver.root, exit 2) or no work directory can be made (exit 3). Imports are read from
+//      disk by resolve.load, so only the entry file's overlay (the open buffer) reaches the
+//      checker;
+//   2. lexes the entry file and its direct imports with the compiler's lexer and derives
+//      symbols, references and declared types from the tokens (lsp_standin.ei).
+//
+// Switching to ide.analyze is a change to this file only: replace the body of `analyze` with
+//
+//     let a = ide.analyze(entry, overlay_paths, overlay_texts)
+//     convert a.files (paths) to indexes, each ide.Span to an m.Span with that index,
+//     ide.Symbol/Ref/TypeAt to the m.* records (container: ide's index, or m.NONE), and
+//     each diag.Diag with `diag_of` below,
+//
+// and delete lsp_standin.ei.
+
+import "deps/core/sys.ei"
+import "deps/std/bytes.ei"
+import "deps/std/fs.ei"
+import "deps/eiderc/intern.ei"
+import "deps/eiderc/lex.ei"
+import "deps/eiderc/parse.ei"
+import "deps/eiderc/resolve.ei"
+import "deps/eiderc/check.ei"
+import "deps/eiderc/comptime.ei" as consteval
+import "deps/eiderc/diag.ei"
+import "lsp_model.ei" as m
+import "lsp_standin.ei" as standin
+
+/// Analyse the program whose entry file is `entry` (an absolute path). `overlay_texts[i]` is
+/// the text to use for `overlay_paths[i]` instead of what is on disk (unsaved buffers).
+pub fn analyze(entry: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) -> m.Analysis uses io, fs, net, clock, ffi {
+    var a = m.empty()
+    let path = norm(entry)
+    a.files.push(path)
+    let src = match text_of(path, overlay_paths, overlay_texts) {
+        Some(t) => t
+        None => {
+            var d = m.Diag(sys.lit("E0804"), 0, 1, 1, sys.lit("cannot read this file"), List.new(), None)
+            a.diags.push(d)
+            return a
+        }
+    }
+    match check_file(path, src) {
+        Some(d) => {
+            if !no_main(d) { a.diags.push(diag_of(inout a, d)) }
+        }
+        None => {}
+    }
+    lexical(inout a, path, src, overlay_paths, overlay_texts)
+    a
+}
+
+/// The prelude's path when it is missing (the toolchain can't be found), else empty.
+pub fn prelude_path() -> List[u8] uses io, fs, ffi {
+    var p = resolve.toolchain_root()
+    p.push(47)
+    bytes.append(inout p, sys.lit("core/prelude.ei"))
+    if fs.exists(p) { return List.new() }
+    p
+}
+
+/// `path` made absolute against the current directory.
+pub fn absolute(path: List[u8]) -> List[u8] uses fs, ffi {
+    match fs.absolute(path) {
+        Ok(p) => norm(p)
+        Err(_) => path
+    }
+}
+
+/// The compiler passes of `eiderc check` on (path, src): the first diagnostic, if any.
+fn check_file(path: List[u8], src: List[u8]) -> Option[diag.Diag] uses io, fs, net, clock, ffi {
+    var names = intern.new()
+    let r = lex.lex(src, inout names)
+    match resolve.lex_diag(r) {
+        Some(d) => { return Some(d) }
+        None => {}
+    }
+    let lx = match r {
+        lex.Done(l) => l
+        _ => { return None }
+    }
+    let parsed = match parse.parse(lx, names) {
+        Ok(x) => x
+        Err(d) => { return Some(d) }
+    }
+    let loaded = match resolve.load(path, src, parsed) {
+        Ok(x) => x
+        Err(d) => { return Some(d) }
+    }
+    let prog = match consteval.eval(loaded) {
+        Ok(x) => x
+        Err(d) => { return Some(d) }
+    }
+    match check.check_mode(prog, false) {
+        Ok(_) => None
+        Err(d) => Some(d)
+    }
+}
+
+/// E0112 "no `main` function" at 1:1: the checker reports it last, so on its own it means
+/// the file is fine as a module.
+fn no_main(d: diag.Diag) -> bool uses ffi {
+    bytes.eq(sys.lit(d.code), sys.lit("E0112")) && d.line == 1 && d.col == 1 && bytes.eq(d.msg, sys.lit("no `main` function"))
+}
+
+/// A compiler diagnostic as the model's (`file` indexes `a.files`, added if new). Module
+/// prefixes in messages are spelled `module.Name`, as eiderc prints them.
+pub fn diag_of(inout a: m.Analysis, d: diag.Diag) -> m.Diag uses ffi {
+    var file: u32 = 0
+    if d.file.len() > 0 { file = file_id(inout a, norm(d.file)) }
+    let fix: Option[m.Fix] = match d.fix {
+        Some(f) => Some(m.Fix(f.line, f.col, f.delete, f.insert))
+        None => None
+    }
+    m.Diag(sys.lit(d.code), file, d.line, d.col, diag.demangle(d.msg), diag.demangle(d.help), fix)
+}
+
+fn file_id(inout a: m.Analysis, path: List[u8]) -> u32 {
+    for i in 0..a.files.len() {
+        if bytes.eq(a.files[i], path) { return i as u32 }
+    }
+    a.files.push(path)
+    (a.files.len() - 1) as u32
+}
+
+fn text_of(path: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) -> Option[List[u8]] uses fs, ffi {
+    for i in 0..overlay_paths.len() {
+        if bytes.eq(overlay_paths[i], path) && i < overlay_texts.len() { return Some(overlay_texts[i]) }
+    }
+    match fs.read(path) {
+        Ok(t) => Some(t)
+        Err(_) => None
+    }
+}
+
+/// `/a/./b/../c` -> `/a/c` (lexically; the compiler joins import paths without resolving).
+pub fn norm(path: List[u8]) -> List[u8] uses ffi {
+    let abs = path.len() > 0 && path[0] == 47
+    var parts: List[List[u8]] = List.new()
+    for p in bytes.split(path, 47) {
+        if p.len() == 0 || bytes.eq(p, sys.lit(".")) { continue }
+        if bytes.eq(p, sys.lit("..")) && parts.len() > 0 && !bytes.eq(parts[parts.len() - 1], sys.lit("..")) {
+            parts.pop()
+            continue
+        }
+        if bytes.eq(p, sys.lit("..")) && abs { continue }
+        parts.push(p)
+    }
+    var out: List[u8] = List.new()
+    if abs { out.push(47) }
+    bytes.append(inout out, bytes.join(parts, sys.lit("/")))
+    out
+}
+
+// ---- the lexical stand-in (lsp_standin.ei) for symbols, references and types
+
+/// Lex `src` as file `id`; None if the lexer fails.
+fn lex_file(id: u32, src: List[u8], inout names: intern.Interner) -> Option[standin.File] {
+    let r = lex.lex(src, inout names)
+    let lx = match r {
+        lex.Done(l) => l
+        _ => { return None }
+    }
+    var toks: List[standin.Tok] = List.new()
+    for t in lx.toks {
+        var kind = standin.TK_PUNCT
+        var sym: u32 = 0
+        var p: u32 = 0
+        match t.kind {
+            lex.Ident => {
+                kind = standin.TK_IDENT
+                sym = t.val as u32
+            }
+            lex.Str => {
+                kind = standin.TK_STR
+                sym = t.val as u32
+            }
+            lex.Int => { kind = standin.TK_INT }
+            lex.Newline => { kind = standin.TK_NL }
+            lex.Eof => { kind = standin.TK_EOF }
+            _ => {
+                let a = t.start as usize
+                if a < src.len() { p = src[a] as u32 }
+                if t.end > t.start + 1 && a + 1 < src.len() { p = p * 256 + (src[a + 1] as u32) }
+            }
+        }
+        toks.push(standin.Tok(kind, sym, p, t.start, t.end, t.line, t.col, t.end_col))
+    }
+    Some(standin.File(id, src, toks, lx.strs))
+}
+
+/// `import "x"` paths of a lexed file with their alias name ids (the stem's when there is
+/// no `as`), from the top level.
+type Imp = { path: List[u8], alias: u32 }
+
+fn imports_of(f: standin.File, inout names: intern.Interner) -> List[Imp] {
+    var out: List[Imp] = List.new()
+    var i: usize = 0
+    var depth: i32 = 0
+    while i + 1 < f.toks.len() {
+        let t = f.toks[i]
+        if t.kind == standin.TK_PUNCT && t.p == 123 { depth += 1 }
+        if t.kind == standin.TK_PUNCT && t.p == 125 { depth -= 1 }
+        // `import` is keyword 23
+        if depth == 0 && t.kind == standin.TK_IDENT && t.sym == 23 && f.toks[i + 1].kind == standin.TK_STR {
+            let path = f.strs[f.toks[i + 1].sym as usize]
+            var alias: u32 = 0
+            if i + 3 < f.toks.len() && f.toks[i + 2].kind == standin.TK_IDENT && f.toks[i + 2].sym == 17 && f.toks[i + 3].kind == standin.TK_IDENT {
+                alias = f.toks[i + 3].sym
+            } else {
+                let st = standin.stem(path)
+                alias = intern.intern(inout names, st, 0, st.len())
+            }
+            out.push(Imp(path, alias))
+        }
+        i += 1
+    }
+    out
+}
+
+/// Whether the last path component has an extension.
+fn has_ext(path: List[u8]) -> bool {
+    let start: usize = match bytes.rfind_byte(path, 47) {
+        Some(k) => k + 1
+        None => 0
+    }
+    var i = start + 1
+    while i < path.len() {
+        if path[i] == 46 { return true }
+        i += 1
+    }
+    false
+}
+
+fn dir_of(path: List[u8]) -> List[u8] {
+    match bytes.rfind_byte(path, 47) {
+        Some(0) => bytes.slice(path, 0, 1)
+        Some(k) => bytes.slice(path, 0, k)
+        None => List.new()
+    }
+}
+
+fn lexical(inout a: m.Analysis, path: List[u8], src: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) uses fs, ffi {
+    var names = intern.new()
+    let entry = match lex_file(0, src, inout names) {
+        Some(f) => f
+        None => { return }
+    }
+    var out = standin.new_out()
+    var mods: List[standin.ModFile] = List.new()
+    let none: List[standin.ModFile] = List.new()
+    let dir = dir_of(path)
+    for imp in imports_of(entry, inout names) {
+        var p = imp.path
+        if !(p.len() > 0 && p[0] == 47) {
+            var j = dir
+            j.push(47)
+            bytes.append(inout j, p)
+            p = j
+        }
+        if !has_ext(p) { bytes.append(inout p, sys.lit(".ei")) }
+        p = norm(p)
+        let text = match text_of(p, overlay_paths, overlay_texts) {
+            Some(t) => t
+            None => { continue }
+        }
+        let id = file_id(inout a, p)
+        match lex_file(id, text, inout names) {
+            Some(f) => {
+                let ignored = standin.scan(f, names.names, false, inout out, none)
+                mods.push(standin.ModFile(imp.alias, id))
+            }
+            None => {}
+        }
+    }
+    let ignored2 = standin.scan(entry, names.names, true, inout out, mods)
+    // keep the entry file's symbols and the public ones of imported files
+    var map: List[u32] = List.new()
+    var n: u32 = 0
+    for i in 0..out.symbols.len() {
+        if out.symbols[i].span.file == 0 || out.public[i] {
+            map.push(n)
+            n += 1
+        } else {
+            map.push(m.NONE)
+        }
+    }
+    for i in 0..out.symbols.len() {
+        if map[i] == m.NONE { continue }
+        var s = out.symbols[i]
+        if s.container != m.NONE { s.container = map[s.container as usize] }
+        a.symbols.push(s)
+    }
+    for r in out.refs {
+        let t = map[r.target as usize]
+        if t != m.NONE { a.refs.push(m.Ref(r.span, t)) }
+    }
+    a.types = out.types
+}
