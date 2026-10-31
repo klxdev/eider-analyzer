@@ -27,7 +27,7 @@ import "lsp_standin.ei" as standin
 
 /// Analyse the program whose entry file is `entry` (an absolute path). `overlay_texts[i]` is
 /// the text to use for `overlay_paths[i]` instead of what is on disk (unsaved buffers).
-pub fn analyze(entry: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) -> m.Analysis uses io, fs, net, clock, ffi {
+pub fn analyze(entry: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) -> m.Analysis uses io, fs, net, clock {
     let path = norm(entry)
     let x = ide.analyze(path, overlay_paths, overlay_texts)
     var a = m.empty()
@@ -65,7 +65,7 @@ pub fn analyze(entry: List[u8], overlay_paths: List[List[u8]], overlay_texts: Li
 
 /// An ide.Span as an m.Span; `last` caches the file index of the previous span (spans come
 /// grouped by file).
-fn span_of(inout a: m.Analysis, inout last: u32, s: ide.Span) -> m.Span uses ffi {
+fn span_of(inout a: m.Analysis, inout last: u32, s: ide.Span) -> m.Span {
     if (last as usize) >= a.files.len() || !same_path(a.files[last as usize], s.file) {
         last = file_id(inout a, norm(s.file))
     }
@@ -73,13 +73,13 @@ fn span_of(inout a: m.Analysis, inout last: u32, s: ide.Span) -> m.Span uses ffi
 }
 
 /// `normalised` equals norm(`raw`) (cheaply when raw is already normal).
-fn same_path(normalised: List[u8], raw: List[u8]) -> bool uses ffi {
+fn same_path(normalised: List[u8], raw: List[u8]) -> bool {
     if bytes.eq(normalised, raw) { return true }
     bytes.eq(normalised, norm(raw))
 }
 
 /// The prelude's path when it is missing (the toolchain can't be found), else empty.
-pub fn prelude_path() -> List[u8] uses io, fs, ffi {
+pub fn prelude_path() -> List[u8] uses io, fs {
     var p = resolve.toolchain_root()
     p.push(47)
     bytes.append(inout p, sys.lit("core/prelude.ei"))
@@ -88,7 +88,7 @@ pub fn prelude_path() -> List[u8] uses io, fs, ffi {
 }
 
 /// `path` made absolute against the current directory.
-pub fn absolute(path: List[u8]) -> List[u8] uses fs, ffi {
+pub fn absolute(path: List[u8]) -> List[u8] uses fs {
     match fs.absolute(path) {
         Ok(p) => norm(p)
         Err(_) => path
@@ -97,7 +97,7 @@ pub fn absolute(path: List[u8]) -> List[u8] uses fs, ffi {
 
 /// A compiler diagnostic as the model's (`file` indexes `a.files`, added if new). Module
 /// prefixes in messages are spelled `module.Name`, as eiderc prints them.
-pub fn diag_of(inout a: m.Analysis, d: diag.Diag) -> m.Diag uses ffi {
+pub fn diag_of(inout a: m.Analysis, d: diag.Diag) -> m.Diag {
     var file: u32 = 0
     if d.file.len() > 0 { file = file_id(inout a, norm(d.file)) }
     let fix: Option[m.Fix] = match d.fix {
@@ -115,7 +115,7 @@ fn file_id(inout a: m.Analysis, path: List[u8]) -> u32 {
     (a.files.len() - 1) as u32
 }
 
-fn text_of(path: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) -> Option[List[u8]] uses fs, ffi {
+fn text_of(path: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) -> Option[List[u8]] uses fs {
     for i in 0..overlay_paths.len() {
         if bytes.eq(overlay_paths[i], path) && i < overlay_texts.len() { return Some(overlay_texts[i]) }
     }
@@ -126,7 +126,7 @@ fn text_of(path: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[Li
 }
 
 /// `/a/./b/../c` -> `/a/c` (lexically; the compiler joins import paths without resolving).
-pub fn norm(path: List[u8]) -> List[u8] uses ffi {
+pub fn norm(path: List[u8]) -> List[u8] {
     let abs = path.len() > 0 && path[0] == 47
     var parts: List[List[u8]] = List.new()
     for p in bytes.split(path, 47) {
@@ -232,7 +232,7 @@ fn dir_of(path: List[u8]) -> List[u8] {
     }
 }
 
-fn lexical(inout a: m.Analysis, path: List[u8], src: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) uses fs, ffi {
+fn lexical(inout a: m.Analysis, path: List[u8], src: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) uses fs {
     var names = intern.new()
     let entry = match lex_file(0, src, inout names) {
         Some(f) => f

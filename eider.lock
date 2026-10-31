@@ -6,11 +6,11 @@ name = "eiderc"
 version = "0.1.0"
 source = "path+../eider-lang/compiler"
 deps = []
-grants = ["io", "fs", "net", "clock", "threads", "ffi"]
+grants = ["io", "fs", "net", "clock"]
 
 [[package]]
 name = "json"
 version = "0.1.0"
 source = "path+../eider-lang/packages/json"
 deps = []
-grants = ["io"]
+grants = []

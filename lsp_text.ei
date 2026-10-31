@@ -190,7 +190,7 @@ fn hexval(c: u8) -> i32 {
 
 /// `file:///a/b%20c.ei` -> `/a/b c.ei`. Anything that isn't a file URI (or a `file://host/`
 /// one) is returned undecoded after its scheme, so it never matches a real path.
-pub fn uri_to_path(uri: List[u8]) -> List[u8] uses ffi {
+pub fn uri_to_path(uri: List[u8]) -> List[u8] {
     let pre = sys.lit("file://")
     if !bytes.starts_with(uri, pre) { return uri }
     var i = pre.len()
@@ -220,7 +220,7 @@ fn hex_digit(n: u8) -> u8 {
 
 /// `/a/b c.ei` -> `file:///a/b%20c.ei` (everything but unreserved characters and `/`
 /// percent-encoded, as VS Code and Neovim spell them).
-pub fn path_to_uri(path: List[u8]) -> List[u8] uses ffi {
+pub fn path_to_uri(path: List[u8]) -> List[u8] {
     var out = sys.lit("file://")
     for c in path {
         if bytes.is_ident(c) || c == 47 || c == 45 || c == 46 || c == 126 {

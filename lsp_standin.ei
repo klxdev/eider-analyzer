@@ -374,7 +374,7 @@ fn add_local(inout s: St, at: usize, kind: u32, detail: List[u8], ty: List[u8], 
 
 /// Scan file `f` into `out`. `entry`: also record locals and references; `modules`: the
 /// imported files already scanned (alias name id -> file id). Returns the file's imports.
-pub fn scan(f: File, names: List[List[u8]], entry: bool, inout out: Out, modules: List[ModFile]) -> List[Import] uses ffi {
+pub fn scan(f: File, names: List[List[u8]], entry: bool, inout out: Out, modules: List[ModFile]) -> List[Import] {
     var lh: Map[u32, u32] = Map.new()
     var dt: Map[u32, bool] = Map.new()
     var s = St(f, names, entry, 0, out, List.new(), List.new(), lh, dt, List.new(), List.new())
@@ -386,7 +386,7 @@ pub fn scan(f: File, names: List[List[u8]], entry: bool, inout out: Out, modules
     s.imports
 }
 
-fn decls(inout s: St) uses ffi {
+fn decls(inout s: St) {
     let n = s.f.toks.len()
     while s.i < n {
         let i = s.i
@@ -457,7 +457,7 @@ fn close(inout s: St, at: usize) {
 }
 
 /// An item at the top level or in an `impl`/`trait` block.
-fn item(inout s: St) uses ffi {
+fn item(inout s: St) {
     let start = s.i
     var i = s.i
     var public = false
@@ -498,7 +498,7 @@ fn item(inout s: St) uses ffi {
 
 /// `import "path" [as alias]`: a module symbol named by the alias (or the path's stem, whose
 /// span is then the string).
-fn import_item(inout s: St, i: usize) uses ffi {
+fn import_item(inout s: St, i: usize) {
     if kind_at(s, i + 1) != TK_STR {
         s.i = i + 1
         return
@@ -539,7 +539,7 @@ pub fn stem(path: List[u8]) -> List[u8] {
 }
 
 /// `fn name[G](params) -> T uses caps { body }` with `fn` at `kw`.
-fn fn_item(inout s: St, start: usize, kw: usize, public: bool) uses ffi {
+fn fn_item(inout s: St, start: usize, kw: usize, public: bool) {
     if !is_name(s, kw + 1) {
         s.i = kw + 1
         return
@@ -598,7 +598,7 @@ fn fn_item(inout s: St, start: usize, kw: usize, public: bool) uses ffi {
 }
 
 /// Parameters between the parens at `a` and `b`: `[inout] name: T` or `self`.
-fn params(inout s: St, a: usize, b: usize, tname: u32) uses ffi {
+fn params(inout s: St, a: usize, b: usize, tname: u32) {
     var j = a + 1
     while j < b {
         j = skip_nl(s, j)
@@ -631,7 +631,7 @@ fn params(inout s: St, a: usize, b: usize, tname: u32) uses ffi {
 }
 
 /// `type Name[G] = { fields }` or `= | V(fields) | ...`.
-fn type_item(inout s: St, start: usize, kw: usize, public: bool) uses ffi {
+fn type_item(inout s: St, start: usize, kw: usize, public: bool) {
     if !is_name(s, kw + 1) {
         s.i = kw + 1
         return
@@ -692,7 +692,7 @@ fn type_item(inout s: St, start: usize, kw: usize, public: bool) uses ffi {
 
 /// Fields `name: T` between tokens a and b (exclusive), separated by commas or newlines;
 /// unnamed variant fields (`Circle(i32)`) are skipped. `own`: the record's type name id.
-fn fields(inout s: St, a: usize, b: usize, owner: u32, own: u32, public: bool) uses ffi {
+fn fields(inout s: St, a: usize, b: usize, owner: u32, own: u32, public: bool) {
     var j = a
     while j < b {
         j = skip_nl(s, j)
@@ -716,7 +716,7 @@ fn fields(inout s: St, a: usize, b: usize, owner: u32, own: u32, public: bool) u
     }
 }
 
-fn const_item(inout s: St, start: usize, kw: usize, public: bool) uses ffi {
+fn const_item(inout s: St, start: usize, kw: usize, public: bool) {
     if !is_name(s, kw + 1) {
         s.i = kw + 1
         return
@@ -735,7 +735,7 @@ fn const_item(inout s: St, start: usize, kw: usize, public: bool) uses ffi {
     s.i = e + 1
 }
 
-fn trait_item(inout s: St, start: usize, kw: usize, public: bool) uses ffi {
+fn trait_item(inout s: St, start: usize, kw: usize, public: bool) {
     if !is_name(s, kw + 1) {
         s.i = kw + 1
         return
@@ -754,7 +754,7 @@ fn trait_item(inout s: St, start: usize, kw: usize, public: bool) uses ffi {
 
 /// `impl[G] [Trait for] Target {`: its methods belong to the target type (resolved by name
 /// once the file is scanned, `fix_impls`).
-fn impl_item(inout s: St, kw: usize) uses ffi {
+fn impl_item(inout s: St, kw: usize) {
     var j = kw + 1
     if is_p(s, j, P_LBRACK) { j = closing(s, j) + 1 }
     var target_at = j
@@ -768,7 +768,7 @@ fn impl_item(inout s: St, kw: usize) uses ffi {
     s.i = k + 1
 }
 
-fn test_item(inout s: St, kw: usize) uses ffi {
+fn test_item(inout s: St, kw: usize) {
     if kind_at(s, kw + 1) != TK_STR {
         s.i = kw + 1
         return
@@ -786,13 +786,13 @@ fn test_item(inout s: St, kw: usize) uses ffi {
 }
 
 /// Builtin types and prelude variants that look like constructors.
-fn is_variant_like(s: St, sym: u32) -> bool uses ffi {
+fn is_variant_like(s: St, sym: u32) -> bool {
     let n = s.names[sym as usize]
     bytes.eq(n, sys.lit("Some")) || bytes.eq(n, sys.lit("None")) || bytes.eq(n, sys.lit("Ok")) || bytes.eq(n, sys.lit("Err"))
 }
 
 /// `let`/`var` at `i`: a name with an optional annotation, or a pattern.
-fn let_decl(inout s: St, i: usize) uses ffi {
+fn let_decl(inout s: St, i: usize) {
     let j = i + 1
     if is_lower(s, j) && (is_p(s, j + 1, P_COLON) || is_p(s, j + 1, P_EQ)) {
         var ty: List[u8] = List.new()
@@ -845,7 +845,7 @@ fn binding_at(s: St, k: usize) -> bool {
 
 /// The bindings of the arm whose `=>` is at `i`: names in its pattern, which starts after
 /// the previous newline, `{` or `,`.
-fn arm_bindings(inout s: St, i: usize) uses ffi {
+fn arm_bindings(inout s: St, i: usize) {
     var a = i
     var depth: i32 = 0
     while a > 0 {
@@ -870,7 +870,7 @@ fn arm_bindings(inout s: St, i: usize) uses ffi {
 }
 
 /// `|a, b: T|` at `i`: closure parameters (inside a function body `|` is nothing else).
-fn closure_params(inout s: St, i: usize) uses ffi {
+fn closure_params(inout s: St, i: usize) {
     var k = i + 1
     var close_at: usize = 0
     while k < s.f.toks.len() && k < i + 64 {
@@ -934,7 +934,7 @@ fn lookup_top(s: St, file: u32, name: u32) -> u32 {
 
 // ---- the reference pass (entry file only)
 
-fn refs(inout s: St, modules: List[ModFile]) uses ffi {
+fn refs(inout s: St, modules: List[ModFile]) {
     let n = s.f.toks.len()
     for i in 0..n {
         let t = s.f.toks[i]

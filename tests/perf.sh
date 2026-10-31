@@ -26,13 +26,13 @@ cat > "$T/perf.jsonl" <<EOF
 {"jsonrpc":"2.0","id":3,"method":"textDocument/semanticTokens/full","params":{$U}}
 {"jsonrpc":"2.0","id":4,"method":"textDocument/foldingRange","params":{$U}}
 !open main.ei 1
-{"jsonrpc":"2.0","id":5,"method":"textDocument/hover","params":{$M,"position":{"line":255,"character":14}}}
-{"jsonrpc":"2.0","id":6,"method":"textDocument/definition","params":{$M,"position":{"line":255,"character":14}}}
-{"jsonrpc":"2.0","id":7,"method":"textDocument/references","params":{$M,"position":{"line":106,"character":4},"context":{"includeDeclaration":true}}}
-{"jsonrpc":"2.0","id":8,"method":"textDocument/completion","params":{$M,"position":{"line":255,"character":14}}}
+{"jsonrpc":"2.0","id":5,"method":"textDocument/hover","params":{$M,"position":{"line":256,"character":14}}}
+{"jsonrpc":"2.0","id":6,"method":"textDocument/definition","params":{$M,"position":{"line":256,"character":14}}}
+{"jsonrpc":"2.0","id":7,"method":"textDocument/references","params":{$M,"position":{"line":107,"character":4},"context":{"includeDeclaration":true}}}
+{"jsonrpc":"2.0","id":8,"method":"textDocument/completion","params":{$M,"position":{"line":256,"character":14}}}
 {"jsonrpc":"2.0","id":11,"method":"textDocument/semanticTokens/full","params":{$M}}
 !change main.ei 2 main.ei
-{"jsonrpc":"2.0","id":9,"method":"textDocument/hover","params":{$M,"position":{"line":255,"character":8}}}
+{"jsonrpc":"2.0","id":9,"method":"textDocument/hover","params":{$M,"position":{"line":256,"character":8}}}
 {"jsonrpc":"2.0","id":10,"method":"shutdown"}
 {"jsonrpc":"2.0","method":"exit"}
 EOF

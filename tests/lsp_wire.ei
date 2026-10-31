@@ -43,7 +43,7 @@ fn words(l: List[u8]) -> List[List[u8]] {
     out
 }
 
-fn read_or_die(path: List[u8]) -> List[u8] uses io, fs, ffi {
+fn read_or_die(path: List[u8]) -> List[u8] uses io, fs {
     match fs.read(path) {
         Ok(t) => t
         Err(_) => {
@@ -56,7 +56,7 @@ fn read_or_die(path: List[u8]) -> List[u8] uses io, fs, ffi {
     }
 }
 
-fn uri(root: List[u8], p: List[u8]) -> List[u8] uses ffi {
+fn uri(root: List[u8], p: List[u8]) -> List[u8] {
     var u = sys.lit("file://")
     bytes.append(inout u, root)
     u.push(47)
@@ -93,7 +93,7 @@ fn unescape(s: List[u8]) -> List[u8] {
     out
 }
 
-fn frame(root: List[u8]) uses io, fs, ffi {
+fn frame(root: List[u8]) uses io, fs {
     let input: List[u8] = match io.read_all() {
         Ok(t) => t
         Err(_) => List.new()
@@ -146,7 +146,7 @@ fn frame(root: List[u8]) uses io, fs, ffi {
     io.out(out)
 }
 
-fn deframe(root: List[u8]) uses io, ffi {
+fn deframe(root: List[u8]) uses io {
     let input: List[u8] = match io.read_all() {
         Ok(t) => t
         Err(_) => List.new()
@@ -176,7 +176,7 @@ fn deframe(root: List[u8]) uses io, ffi {
     io.out(out)
 }
 
-fn main() uses io, fs, ffi {
+fn main() uses io, fs {
     let argv = env.args()
     if argv.len() < 3 {
         io.errln(sys.lit("usage: lsp-wire frame|deframe <root>"))

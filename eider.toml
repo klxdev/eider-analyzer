@@ -4,13 +4,14 @@ version = "0.1.0"
 main = "lsp_main.ei"
 description = "eider-analyzer: a language server (LSP 3.17) for Eider, written in Eider"
 
+# Grants are what each package's code uses, as the compiler reports it (`eiderc caps`) and
+# checks when it builds (E0204): json uses nothing, so it is granted nothing.
 [deps.json]
 path = "../eider-lang/packages/json"
-# (`io` only for its tests: eider-pkg scans every .ei file of a package)
-uses = ["io"]
 
 # The compiler package (eider-lang/compiler): lexer, parser, checker, diagnostics. Only
-# lsp_analysis.ei imports it.
+# lsp_analysis.ei imports it. No `ffi`: the compiler has no unmanaged code of its own (it
+# reaches the OS through core, which the toolchain grants).
 [deps.eiderc]
 path = "../eider-lang/compiler"
-uses = ["io", "fs", "net", "clock", "threads", "ffi"]
+uses = ["io", "fs", "net", "clock"]

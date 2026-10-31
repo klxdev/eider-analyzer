@@ -37,7 +37,7 @@ fn lower(c: u8) -> u8 {
 }
 
 /// The value of header `name` (lowercase) in header text `h`, if present.
-fn header(h: List[u8], name: List[u8]) -> Option[List[u8]] uses ffi {
+fn header(h: List[u8], name: List[u8]) -> Option[List[u8]] {
     for line in bytes.split(h, 10) {
         var l = line
         if l.len() > 0 && l[l.len() - 1] == 13 { l = bytes.slice(l, 0, l.len() - 1) }
@@ -58,7 +58,7 @@ fn header(h: List[u8], name: List[u8]) -> Option[List[u8]] uses ffi {
 }
 
 /// The next message in the buffer.
-pub fn next(inout f: Framer) -> Frame uses ffi {
+pub fn next(inout f: Framer) -> Frame {
     if f.pos >= f.buf.len() { return NeedMore }
     let sep = blank_line()
     let end = match bytes.find(f.buf, sep, f.pos) {
@@ -120,7 +120,7 @@ fn blank_line() -> List[u8] {
     b
 }
 
-pub fn frame(body: List[u8]) -> List[u8] uses ffi {
+pub fn frame(body: List[u8]) -> List[u8] {
     var out = sys.lit("Content-Length: ")
     bytes.append(inout out, bytes.from_u64(body.len() as u64))
     bytes.append(inout out, blank_line())
@@ -128,10 +128,10 @@ pub fn frame(body: List[u8]) -> List[u8] uses ffi {
     out
 }
 
-pub fn send(body: List[u8]) uses io, ffi { io.out(frame(body)) }
+pub fn send(body: List[u8]) uses io { io.out(frame(body)) }
 
 /// `{"jsonrpc":"2.0","id":<id>,"result":<result>}` (`id` and `result` are JSON text).
-pub fn result(id: List[u8], res: List[u8]) -> List[u8] uses ffi {
+pub fn result(id: List[u8], res: List[u8]) -> List[u8] {
     var o = sys.lit("{\"jsonrpc\":\"2.0\",\"id\":")
     bytes.append(inout o, id)
     bytes.append(inout o, sys.lit(",\"result\":"))
@@ -140,7 +140,7 @@ pub fn result(id: List[u8], res: List[u8]) -> List[u8] uses ffi {
     o
 }
 
-pub fn error(id: List[u8], code: i64, msg: List[u8]) -> List[u8] uses ffi {
+pub fn error(id: List[u8], code: i64, msg: List[u8]) -> List[u8] {
     var o = sys.lit("{\"jsonrpc\":\"2.0\",\"id\":")
     bytes.append(inout o, id)
     bytes.append(inout o, sys.lit(",\"error\":{\"code\":"))
@@ -151,7 +151,7 @@ pub fn error(id: List[u8], code: i64, msg: List[u8]) -> List[u8] uses ffi {
     o
 }
 
-pub fn notification(method: str, params: List[u8]) -> List[u8] uses ffi {
+pub fn notification(method: str, params: List[u8]) -> List[u8] {
     var o = sys.lit("{\"jsonrpc\":\"2.0\",\"method\":")
     json.quote_into(inout o, sys.lit(method))
     bytes.append(inout o, sys.lit(",\"params\":"))
@@ -175,7 +175,7 @@ pub fn q(s: List[u8]) -> List[u8] { json.quote(s) }
 pub fn num(n: u64) -> List[u8] { bytes.from_u64(n) }
 
 /// `"key":` appended to `o`, after a comma unless `o` ends with `{` or `[`.
-pub fn key(inout o: List[u8], k: str) uses ffi {
+pub fn key(inout o: List[u8], k: str) {
     if o.len() > 0 {
         let c = o[o.len() - 1]
         if c != 123 && c != 91 { o.push(44) }
@@ -184,17 +184,17 @@ pub fn key(inout o: List[u8], k: str) uses ffi {
     o.push(58)
 }
 
-pub fn kv_str(inout o: List[u8], k: str, v: List[u8]) uses ffi {
+pub fn kv_str(inout o: List[u8], k: str, v: List[u8]) {
     key(inout o, k)
     json.quote_into(inout o, v)
 }
 
-pub fn kv_num(inout o: List[u8], k: str, v: u64) uses ffi {
+pub fn kv_num(inout o: List[u8], k: str, v: u64) {
     key(inout o, k)
     bytes.append(inout o, bytes.from_u64(v))
 }
 
-pub fn kv_raw(inout o: List[u8], k: str, v: List[u8]) uses ffi {
+pub fn kv_raw(inout o: List[u8], k: str, v: List[u8]) {
     key(inout o, k)
     bytes.append(inout o, v)
 }
@@ -206,10 +206,10 @@ pub fn sep(inout o: List[u8]) {
 
 // ---- log (stderr; stdout is the protocol)
 
-pub fn log(msg: List[u8]) uses io, ffi {
+pub fn log(msg: List[u8]) uses io {
     var l = sys.lit("eider-analyzer: ")
     bytes.append(inout l, msg)
     io.errln(l)
 }
 
-pub fn log_s(msg: str) uses io, ffi { log(sys.lit(msg)) }
+pub fn log_s(msg: str) uses io { log(sys.lit(msg)) }

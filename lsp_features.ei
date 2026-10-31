@@ -13,13 +13,13 @@ import "lsp_rpc.ei" as rpc
 /// they were analysed (empty when unreadable) and their line tables.
 pub type Res = { an: m.Analysis, texts: List[List[u8]], starts: List[List[u32]], uri: List[u8], version: i64 }
 
-pub fn uri_of(r: Res, file: u32) -> List[u8] uses ffi {
+pub fn uri_of(r: Res, file: u32) -> List[u8] {
     if file == 0 { return r.uri }
     if (file as usize) < r.an.files.len() { return t.path_to_uri(r.an.files[file as usize]) }
     r.uri
 }
 
-fn pos_json(inout o: List[u8], p: t.Pos) uses ffi {
+fn pos_json(inout o: List[u8], p: t.Pos) {
     bytes.append(inout o, sys.lit("{\"line\":"))
     bytes.append(inout o, rpc.num(p.line as u64))
     bytes.append(inout o, sys.lit(",\"character\":"))
@@ -37,7 +37,7 @@ pub fn lsp_pos(r: Res, file: u32, line: u32, col: u32) -> t.Pos {
     t.Pos(l, c)
 }
 
-pub fn range_json(inout o: List[u8], r: Res, s: m.Span) uses ffi {
+pub fn range_json(inout o: List[u8], r: Res, s: m.Span) {
     bytes.append(inout o, sys.lit("{\"start\":"))
     pos_json(inout o, lsp_pos(r, s.file, s.line, s.col))
     bytes.append(inout o, sys.lit(",\"end\":"))
@@ -45,7 +45,7 @@ pub fn range_json(inout o: List[u8], r: Res, s: m.Span) uses ffi {
     o.push(125)
 }
 
-fn location_json(inout o: List[u8], r: Res, s: m.Span) uses ffi {
+fn location_json(inout o: List[u8], r: Res, s: m.Span) {
     bytes.append(inout o, sys.lit("{\"uri\":"))
     json.quote_into(inout o, uri_of(r, s.file))
     bytes.append(inout o, sys.lit(",\"range\":"))
@@ -88,7 +88,7 @@ fn hit_at(r: Res, p: t.Pos) -> Hit {
 
 // ---- definition, references
 
-pub fn definition(r: Res, p: t.Pos) -> List[u8] uses ffi {
+pub fn definition(r: Res, p: t.Pos) -> List[u8] {
     let h = hit_at(r, p)
     if !h.found { return sys.lit("null") }
     var o: List[u8] = List.new()
@@ -96,7 +96,7 @@ pub fn definition(r: Res, p: t.Pos) -> List[u8] uses ffi {
     o
 }
 
-pub fn references(r: Res, p: t.Pos, include_decl: bool) -> List[u8] uses ffi {
+pub fn references(r: Res, p: t.Pos, include_decl: bool) -> List[u8] {
     let h = hit_at(r, p)
     if !h.found { return sys.lit("null") }
     var o = sys.lit("[")
@@ -115,7 +115,7 @@ pub fn references(r: Res, p: t.Pos, include_decl: bool) -> List[u8] uses ffi {
 
 // ---- hover
 
-pub fn hover(r: Res, p: t.Pos) -> List[u8] uses ffi {
+pub fn hover(r: Res, p: t.Pos) -> List[u8] {
     let e = eider_pos(r, p)
     let l = t.pk_line(e)
     let c = t.pk_col(e)
@@ -251,7 +251,7 @@ fn aliases(r: Res) -> List[Alias] {
     out
 }
 
-pub fn document_symbols(r: Res) -> List[u8] uses ffi {
+pub fn document_symbols(r: Res) -> List[u8] {
     let n = r.an.symbols.len()
     // children of each symbol (outline symbols of this file only), and which are roots
     var first: List[u32] = List.new()
@@ -288,7 +288,7 @@ pub fn document_symbols(r: Res) -> List[u8] uses ffi {
     o
 }
 
-fn sym_json(inout o: List[u8], r: Res, i: u32, first: List[u32], next: List[u32], variants: List[bool], depth: u32) uses ffi {
+fn sym_json(inout o: List[u8], r: Res, i: u32, first: List[u32], next: List[u32], variants: List[bool], depth: u32) {
     let s = r.an.symbols[i as usize]
     rpc.sep(inout o)
     o.push(123)
@@ -321,7 +321,7 @@ fn sym_json(inout o: List[u8], r: Res, i: u32, first: List[u32], next: List[u32]
 
 // ---- folding ranges
 
-pub fn folding(r: Res) -> List[u8] uses ffi {
+pub fn folding(r: Res) -> List[u8] {
     var o = sys.lit("[")
     for s in r.an.symbols {
         let f = s.full
@@ -357,7 +357,7 @@ pub fn folding(r: Res) -> List[u8] uses ffi {
     o
 }
 
-fn folding_imports(inout o: List[u8], a: u32, b: u32) uses ffi {
+fn folding_imports(inout o: List[u8], a: u32, b: u32) {
     if a == 0 || b <= a { return }
     rpc.sep(inout o)
     o.push(123)
@@ -370,7 +370,7 @@ fn folding_imports(inout o: List[u8], a: u32, b: u32) uses ffi {
 // ---- semantic tokens
 
 /// The legend: token types and modifiers, in index order.
-pub fn legend() -> List[u8] uses ffi {
+pub fn legend() -> List[u8] {
     sys.lit("{\"tokenTypes\":[\"namespace\",\"type\",\"enumMember\",\"property\",\"function\",\"method\",\"parameter\",\"variable\",\"interface\",\"enum\"],\"tokenModifiers\":[\"declaration\",\"readonly\"]}")
 }
 
@@ -422,7 +422,7 @@ pub fn sort_u64(xs: List[u64]) -> List[u64] {
     a
 }
 
-pub fn semantic_tokens(r: Res) -> List[u8] uses ffi {
+pub fn semantic_tokens(r: Res) -> List[u8] {
     if r.texts.len() == 0 { return sys.lit("{\"data\":[]}") }
     // candidates: (span, type, modifiers) packed for sorting by position
     var spans: List[m.Span] = List.new()
@@ -510,7 +510,7 @@ fn completion_kind(k: u32) -> u64 {
     6
 }
 
-fn item_json(inout o: List[u8], label: List[u8], kind: u64, detail: List[u8]) uses ffi {
+fn item_json(inout o: List[u8], label: List[u8], kind: u64, detail: List[u8]) {
     rpc.sep(inout o)
     o.push(123)
     rpc.kv_str(inout o, "label", label)
@@ -528,7 +528,7 @@ fn contains_name(xs: List[List[u8]], x: List[u8]) -> bool {
 
 /// Completion at `p` in the document's current `text` (which may be newer than the
 /// analysis: the receiver before a `.` is looked up by name).
-pub fn completion(r: Res, text: List[u8], starts: List[u32], p: t.Pos) -> List[u8] uses ffi {
+pub fn completion(r: Res, text: List[u8], starts: List[u32], p: t.Pos) -> List[u8] {
     let off = t.offset_of_pos(text, starts, p)
     // the identifier prefix being typed
     var a = off
@@ -552,7 +552,7 @@ pub fn completion(r: Res, text: List[u8], starts: List[u32], p: t.Pos) -> List[u
     o
 }
 
-fn keywords() -> List[List[u8]] uses ffi {
+fn keywords() -> List[List[u8]] {
     var out: List[List[u8]] = List.new()
     for w in ["fn", "type", "let", "var", "if", "else", "while", "for", "in", "return", "match", "true", "false", "uses", "test",
         "assert", "inout", "as", "const", "break", "continue", "import", "trait", "impl", "pub", "comptime", "extern", "export", "unsafe",
@@ -563,7 +563,7 @@ fn keywords() -> List[List[u8]] uses ffi {
 
 /// Names visible at line `line` of the document: its items, the imported modules' aliases,
 /// and the parameters and locals of the function around the line declared before it.
-fn visible(inout o: List[u8], inout seen: List[List[u8]], r: Res, prefix: List[u8], line: u32) uses ffi {
+fn visible(inout o: List[u8], inout seen: List[List[u8]], r: Res, prefix: List[u8], line: u32) {
     // the innermost function (or test) whose full span holds the line
     var cur = m.NONE
     for i in 0..r.an.symbols.len() {
@@ -602,7 +602,7 @@ fn visible(inout o: List[u8], inout seen: List[List[u8]], r: Res, prefix: List[u
 /// Members after `recv.`: a module's public items, or the fields and methods of recv's
 /// type (by the declared type of the local, parameter, field or constant named recv), or
 /// the built-in methods of List, String, Map, Option and Result.
-fn members(inout o: List[u8], inout seen: List[List[u8]], r: Res, recv: List[u8], prefix: List[u8], line: u32) uses ffi {
+fn members(inout o: List[u8], inout seen: List[List[u8]], r: Res, recv: List[u8], prefix: List[u8], line: u32) {
     // a module alias: from ide.analyze's references to modules, else the lexical
     // fallback's import symbols
     var mf: u32 = 0
@@ -656,7 +656,7 @@ fn members(inout o: List[u8], inout seen: List[List[u8]], r: Res, recv: List[u8]
 
 /// A module item usable from another module: declared `pub` (its detail is its source
 /// form), or a variant of a `pub` type.
-fn public(r: Res, x: m.Symbol) -> bool uses ffi {
+fn public(r: Res, x: m.Symbol) -> bool {
     let p = sys.lit("pub ")
     if bytes.starts_with(x.detail, p) { return true }
     if x.kind == m.SK_VARIANT && x.container != m.NONE && (x.container as usize) < r.an.symbols.len() {
@@ -713,7 +713,7 @@ fn type_of_name(r: Res, name: List[u8], line: u32) -> List[u8] {
 }
 
 /// `List[Point]` -> `List`, `inout Point` -> `Point`, `g.Point` -> `Point`.
-fn type_head(ty: List[u8]) -> List[u8] uses ffi {
+fn type_head(ty: List[u8]) -> List[u8] {
     var i: usize = 0
     var out: List[u8] = List.new()
     while i < ty.len() {
@@ -731,7 +731,7 @@ fn type_head(ty: List[u8]) -> List[u8] uses ffi {
     out
 }
 
-fn builtin_methods(head: List[u8]) -> List[List[u8]] uses ffi {
+fn builtin_methods(head: List[u8]) -> List[List[u8]] {
     var out: List[List[u8]] = List.new()
     if bytes.eq(head, sys.lit("List")) {
         for w in ["len", "push", "pop", "contains", "is_empty", "clear", "sum", "map", "filter", "for_each", "any", "all", "fold", "new"] { out.push(sys.lit(w)) }
@@ -750,7 +750,7 @@ fn builtin_methods(head: List[u8]) -> List[List[u8]] uses ffi {
 // ---- diagnostics and code actions
 
 /// The LSP range of a diagnostic at (line, col): the identifier there, else one character.
-fn diag_range(inout o: List[u8], r: Res, file: u32, line: u32, col: u32) uses ffi {
+fn diag_range(inout o: List[u8], r: Res, file: u32, line: u32, col: u32) {
     let f = file as usize
     if f >= r.texts.len() || r.texts[f].len() == 0 {
         range_json(inout o, r, m.Span(file, line, col, line, col + 1))
@@ -774,7 +774,7 @@ fn diag_range(inout o: List[u8], r: Res, file: u32, line: u32, col: u32) uses ff
     o.push(125)
 }
 
-fn diag_json(inout o: List[u8], r: Res, d: m.Diag) uses ffi {
+fn diag_json(inout o: List[u8], r: Res, d: m.Diag) {
     o.push(123)
     rpc.key(inout o, "range")
     diag_range(inout o, r, d.file, d.line, d.col)
@@ -791,7 +791,7 @@ fn diag_json(inout o: List[u8], r: Res, d: m.Diag) uses ffi {
 }
 
 /// The diagnostics of file `file` as a JSON array.
-pub fn diagnostics(r: Res, file: u32) -> List[u8] uses ffi {
+pub fn diagnostics(r: Res, file: u32) -> List[u8] {
     var o = sys.lit("[")
     for d in r.an.diags {
         if d.file != file { continue }
@@ -817,7 +817,7 @@ pub fn diag_files(r: Res) -> List[u32] {
 
 /// Quick fixes: every diagnostic of the document with a machine-applicable fix whose line
 /// is in [first_line, last_line] (0-based LSP lines).
-pub fn code_actions(r: Res, first_line: u32, last_line: u32) -> List[u8] uses ffi {
+pub fn code_actions(r: Res, first_line: u32, last_line: u32) -> List[u8] {
     var o = sys.lit("[")
     if r.texts.len() == 0 { return sys.lit("[]") }
     let text = r.texts[0]

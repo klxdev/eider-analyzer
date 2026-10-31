@@ -45,21 +45,21 @@ const NONE: u32 = 4294967295
 
 // ---- reading requests
 
-fn g(d: json.Doc, id: u32, k: str) -> u32 uses ffi {
+fn g(d: json.Doc, id: u32, k: str) -> u32 {
     match json.field(d, id, k) {
         Some(x) => x
         None => NONE
     }
 }
 
-fn gs(d: json.Doc, id: u32, k: str) -> List[u8] uses ffi {
+fn gs(d: json.Doc, id: u32, k: str) -> List[u8] {
     match json.as_str(d, g(d, id, k)) {
         Some(x) => x
         None => List.new()
     }
 }
 
-fn gi(d: json.Doc, id: u32, k: str) -> i64 uses ffi {
+fn gi(d: json.Doc, id: u32, k: str) -> i64 {
     match json.as_int(d, g(d, id, k)) {
         Some(x) => x
         None => -1
@@ -72,14 +72,14 @@ fn clamp_u32(x: i64) -> u32 {
     x as u32
 }
 
-fn pos_param(d: json.Doc, params: u32) -> t.Pos uses ffi {
+fn pos_param(d: json.Doc, params: u32) -> t.Pos {
     let p = g(d, params, "position")
     t.Pos(clamp_u32(gi(d, p, "line")), clamp_u32(gi(d, p, "character")))
 }
 
-fn uri_param(d: json.Doc, params: u32) -> List[u8] uses ffi { gs(d, g(d, params, "textDocument"), "uri") }
+fn uri_param(d: json.Doc, params: u32) -> List[u8] { gs(d, g(d, params, "textDocument"), "uri") }
 
-fn is(a: List[u8], s: str) -> bool uses ffi { bytes.eq(a, sys.lit(s)) }
+fn is(a: List[u8], s: str) -> bool { bytes.eq(a, sys.lit(s)) }
 
 // ---- documents
 
@@ -92,7 +92,7 @@ fn find_doc(s: S, uri: List[u8]) -> u32 {
 
 /// The nearest directory at or above `dir` holding an eider.toml (the package root), else
 /// the workspace root that contains the file, else the file's directory.
-fn package_root(s: S, path: List[u8]) -> List[u8] uses fs, ffi {
+fn package_root(s: S, path: List[u8]) -> List[u8] uses fs {
     var dir = t.dir_of(path)
     while dir.len() > 0 {
         var toml = dir
@@ -109,7 +109,7 @@ fn package_root(s: S, path: List[u8]) -> List[u8] uses fs, ffi {
 }
 
 /// The path of the package's main file (`main = "..."` in `root`/eider.toml), or empty.
-fn package_main(root: List[u8]) -> List[u8] uses fs, ffi {
+fn package_main(root: List[u8]) -> List[u8] uses fs {
     var toml = root
     toml.push(47)
     bytes.append(inout toml, sys.lit("eider.toml"))
@@ -136,7 +136,7 @@ fn package_main(root: List[u8]) -> List[u8] uses fs, ffi {
     List.new()
 }
 
-fn open_doc(inout s: S, uri: List[u8], version: i64, text: List[u8]) uses io, fs, ffi {
+fn open_doc(inout s: S, uri: List[u8], version: i64, text: List[u8]) uses io, fs {
     let path = t.uri_to_path(uri)
     let root = package_root(s, path)
     let i = find_doc(s, uri)
@@ -160,7 +160,7 @@ fn open_doc(inout s: S, uri: List[u8], version: i64, text: List[u8]) uses io, fs
 fn empty_res() -> feat.Res { feat.Res(m.empty(), List.new(), List.new(), List.new(), 0) }
 
 /// Analyse document i now and publish its diagnostics.
-pub fn analyze_doc(inout s: S, i: u32) uses io, fs, net, clock, ffi {
+pub fn analyze_doc(inout s: S, i: u32) uses io, fs, net, clock {
     let doc = s.docs[i as usize]
     var paths: List[List[u8]] = List.new()
     var texts: List[List[u8]] = List.new()
@@ -225,7 +225,7 @@ pub fn analyze_doc(inout s: S, i: u32) uses io, fs, net, clock, ffi {
 
 /// Publish the diagnostics of `res` per file, and empty lists for files that had some
 /// before but have none now. Returns the URIs published with diagnostics.
-fn publish(res: feat.Res, old: List[List[u8]]) -> List[List[u8]] uses io, ffi {
+fn publish(res: feat.Res, old: List[List[u8]]) -> List[List[u8]] uses io {
     var now: List[List[u8]] = List.new()
     // the document itself always gets a (possibly empty) list
     var files = feat.diag_files(res)
@@ -264,7 +264,7 @@ fn publish(res: feat.Res, old: List[List[u8]]) -> List[List[u8]] uses io, ffi {
 }
 
 /// Analyse every dirty document (the input queue is empty).
-pub fn flush(inout s: S) uses io, fs, net, clock, ffi {
+pub fn flush(inout s: S) uses io, fs, net, clock {
     for i in 0..s.docs.len() {
         if s.docs[i].dirty { analyze_doc(inout s, i as u32) }
     }
@@ -278,7 +278,7 @@ pub fn has_dirty(s: S) -> bool {
 }
 
 /// The analysis of document `uri`, analysing it first if it is dirty; None if not open.
-fn res_for(inout s: S, uri: List[u8]) -> Option[feat.Res] uses io, fs, net, clock, ffi {
+fn res_for(inout s: S, uri: List[u8]) -> Option[feat.Res] uses io, fs, net, clock {
     let i = find_doc(s, uri)
     if i == NONE { return None }
     if s.docs[i as usize].dirty || !s.slots[i as usize].has { analyze_doc(inout s, i) }
@@ -288,7 +288,7 @@ fn res_for(inout s: S, uri: List[u8]) -> Option[feat.Res] uses io, fs, net, cloc
 // ---- messages
 
 /// Handle one message body.
-pub fn handle(inout s: S, body: List[u8]) uses io, fs, net, clock, ffi {
+pub fn handle(inout s: S, body: List[u8]) uses io, fs, net, clock {
     let d = match json.parse(body) {
         Ok(x) => x
         Err(e) => {
@@ -354,7 +354,7 @@ pub fn handle(inout s: S, body: List[u8]) uses io, fs, net, clock, ffi {
     }
 }
 
-fn notification(inout s: S, method: List[u8], d: json.Doc, params: u32) uses io, fs, net, clock, ffi {
+fn notification(inout s: S, method: List[u8], d: json.Doc, params: u32) uses io, fs, net, clock {
     if is(method, "initialized") { return }
     if is(method, "textDocument/didOpen") {
         let td = g(d, params, "textDocument")
@@ -445,12 +445,12 @@ fn notification(inout s: S, method: List[u8], d: json.Doc, params: u32) uses io,
     // $/cancelRequest, $/setTrace, workspace/didChangeConfiguration, ...: nothing to do
 }
 
-fn range_pos(d: json.Doc, rg: u32, k: str) -> t.Pos uses ffi {
+fn range_pos(d: json.Doc, rg: u32, k: str) -> t.Pos {
     let p = g(d, rg, k)
     t.Pos(clamp_u32(gi(d, p, "line")), clamp_u32(gi(d, p, "character")))
 }
 
-fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8]) -> List[u8] uses io, fs, net, clock, ffi {
+fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8]) -> List[u8] uses io, fs, net, clock {
     if is(method, "initialize") {
         if s.initialized { return rpc.error(id, rpc.INVALID_REQUEST, sys.lit("initialize was already called")) }
         s.initialized = true
@@ -498,13 +498,13 @@ fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8])
     rpc.result(id, feat.code_actions(res, a.line, b.line))
 }
 
-fn unknown(method: List[u8]) -> List[u8] uses ffi {
+fn unknown(method: List[u8]) -> List[u8] {
     var m2 = sys.lit("unknown method ")
     bytes.append(inout m2, method)
     m2
 }
 
-fn roots_from(inout s: S, d: json.Doc, params: u32) uses ffi {
+fn roots_from(inout s: S, d: json.Doc, params: u32) {
     let folders = g(d, params, "workspaceFolders")
     for k in 0..json.len(d, folders) {
         let f = json.at(d, folders, k).unwrap_or(NONE)
@@ -517,7 +517,7 @@ fn roots_from(inout s: S, d: json.Doc, params: u32) uses ffi {
     if rp.len() > 0 && s.roots.len() == 0 { s.roots.push(rp) }
 }
 
-fn capabilities() -> List[u8] uses ffi {
+fn capabilities() -> List[u8] {
     var o = sys.lit("{\"capabilities\":{")
     bytes.append(inout o, sys.lit("\"positionEncoding\":\"utf-16\","))
     bytes.append(inout o, sys.lit("\"textDocumentSync\":{\"openClose\":true,\"change\":1,\"save\":{\"includeText\":false}},"))
