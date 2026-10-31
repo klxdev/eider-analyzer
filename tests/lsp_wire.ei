@@ -12,13 +12,13 @@
 //   !raw <text>                  <text> as is, with \r and \n meaning CR and LF (malformed input)
 //   !body <text>                 <text> framed as is, without ${ROOT} or JSON checks
 
-import "core/sys"
-import "std/bytes"
-import "std/io"
-import "std/fs"
-import "std/env"
-import "json"
-import "../lsp_rpc.ei" as rpc
+import core.sys
+import std.bytes
+import std.io
+import std.fs
+import std.env
+import json
+import eider_analyzer.lsp_rpc as rpc
 
 fn subst(s: List[u8], from: List[u8], to: List[u8]) -> List[u8] {
     let mut out: List[u8] = List.new()

@@ -1,0 +1,6 @@
+[package]
+name = "dotted"
+version = "0.1.0"
+main = "app.ei"
+# every form of dotted import (eider-lang docs/compiler.md, "C8.26"): app.ei imports the
+# toolchain's modules, the std namespace and this package's own modules by its name

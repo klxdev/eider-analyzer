@@ -8,8 +8,8 @@
 // unless it is a UTF-8 continuation byte (0x80..0xBF). Lines end at LF (a CR before it is
 // part of the line, as for the lexer, and is never counted past the end of the text).
 
-import "core/sys"
-import "std/bytes"
+import core.sys
+import std.bytes
 
 /// An LSP position: 0-based line and UTF-16 character.
 pub type Pos = { line: u32, ch: u32 }

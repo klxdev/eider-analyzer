@@ -17,16 +17,16 @@
 // URIs), lsp_model (the analysis data), lsp_analysis (the only module that touches the
 // compiler), lsp_standin (lexical symbols for buffers that do not parse).
 
-import "core/sys"
-import "core/version" as toolchain
-import "std/bytes"
-import "std/io"
-import "std/env"
-import "lsp_model.ei" as m
-import "lsp_rpc.ei" as rpc
-import "lsp_server.ei" as server
-import "lsp_analysis.ei" as analysis
-import "lsp_version.ei" as ver
+import core.sys
+import core.version as toolchain
+import std.bytes
+import std.io
+import std.env
+import eider_analyzer.lsp_model as m
+import eider_analyzer.lsp_rpc as rpc
+import eider_analyzer.lsp_server as server
+import eider_analyzer.lsp_analysis as analysis
+import eider_analyzer.lsp_version as ver
 
 fn is(a: List[u8], s: str) -> bool { bytes.eq(a, sys.lit(s)) }
 

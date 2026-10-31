@@ -5,6 +5,9 @@
 # fixtures/syntax.ei (linked as tests/lexical/syntax.ei) has every form since
 # docs/compiler.md C8.2: no local named `mut`, `for (k, v)` and `|inout x|` bindings, type
 # aliases with their targets, `std/fs` found through the toolchain, labels not taken for names.
+# fixtures/dotted/lexical.ei (linked as tests/lexical/dotted.ei; "C8.26") has every dotted
+# import: a module per group member, aliases, the std namespace (`std.random.below`: the
+# module segment and the item), the package's own modules found from its eider.toml.
 cd "$(dirname "$0")/.." || exit 1
 root=$(pwd)
 server=$root/target/bin/eider-analyzer

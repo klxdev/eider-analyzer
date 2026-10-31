@@ -12,11 +12,11 @@ the compiler's.
 | `publishDiagnostics` | the compiler's diagnostic (code, message, `help:` line), for the open file and for an imported module the error is in; E0112 "no `main`" only for the package's main file (eider.toml `main`) |
 | `codeAction` (quickfix) | the compiler's machine-applicable fix as an edit |
 | `documentSymbol` | hierarchical: types with their fields/variants and methods, variants with their fields, functions (with their loop labels, `outer: for`), constants, traits, tests |
-| `definition`, `references` | every name the checker resolved: locals, parameters, items, fields, methods, variants, module aliases, across modules |
-| `hover` | the symbol's signature or type, what it is and where, and the checker's type at the cursor; a type alias shows its target (`type Handler = fn(Request) -> Response`); prelude items the checker records no reference for (`From` in `impl From[E] for T`) and built-in types (`Ref`, `List`, `Map`, ...) get their declaration or a short description |
-| `foldingRange` | multi-line items (from their full spans) and runs of imports |
-| `semanticTokens/full` | namespace (import aliases), type, enumMember (variants), property (fields), function, method, parameter, variable (locals, constants with `readonly`), interface (traits); `declaration` on definitions |
-| `completion` | names in scope at the cursor (locals before it, items, aliases, the prelude's types, variants and traits: Option, Ordering, Less, Copy, From, Default, ...; keywords); after `.`: a module's `pub` items, or the fields and methods of the receiver's type, or the built-in methods of List/String/str/Map/Option/Result/Ref/Box/Mutex/Chan/Task, then the operation-trait methods (`copy`, `compare`, `to_string`, ...) and `take`/`replace`; after a type name also `default` and `from` |
+| `definition`, `references` | every name the checker resolved: locals, parameters, items, fields, methods, variants, module aliases, across modules; an import's last path segment and its alias (`sys` of `import core.sys`, `fs` and `files` of `import std.{fs as files}`) and the module segment of a namespace use (`bytes` of `std.bytes.eq`) go to the module's file |
+| `hover` | the symbol's signature or type, what it is and where, and the checker's type at the cursor; a type alias shows its target (`type Handler = fn(Request) -> Response`); a module its dotted name (`module std.bytes`), a package namespace (`std` of `import std`) what it is; prelude items the checker records no reference for (`From` in `impl From[E] for T`) and built-in types (`Ref`, `List`, `Map`, ...) get their declaration or a short description |
+| `foldingRange` | multi-line items (from their full spans) and runs of import statements (a group across lines, `import std.{` ... `}`, included) |
+| `semanticTokens/full` | namespace (import aliases, path segments naming a module), type, enumMember (variants), property (fields), function, method, parameter, variable (locals, constants with `readonly`), interface (traits); `declaration` on definitions |
+| `completion` | names in scope at the cursor (locals before it, items, aliases and package namespaces, the prelude's types, variants and traits: Option, Ordering, Less, Copy, From, Default, ...; keywords); after `.`: a module's `pub` items, or the fields and methods of the receiver's type, or the built-in methods of List/String/str/Map/Option/Result/Ref/Box/Mutex/Chan/Task, then the operation-trait methods (`copy`, `compare`, `to_string`, ...) and `take`/`replace`; after a type name also `default` and `from`; module paths: after `import ` the packages (`std`, `core`, the package's own name, its eider.toml dependencies; in no package, the modules beside the file), after `import a.` and in a group's `{ }` the modules and directories of modules of `a` (std and core in the toolchain, a dependency through eider.lock); in code, after a namespace `std.` its modules and after `std.time.` the module's `pub` items |
 
 Documents are kept in memory (full sync; ranged changes are applied too) and passed to the
 compiler as overlays. Analysis is debounced: a burst of edits is analysed once, when the
@@ -29,10 +29,12 @@ crash; stdout carries only the protocol.
 
 The workspace root of a file is the nearest directory with an `eider.toml`.
 
-The analyzer follows eider-lang's docs/compiler.md through C8.25 (bitwise operators, `()`,
+The analyzer follows eider-lang's docs/compiler.md through C8.26 (bitwise operators, `()`,
 package imports, operation traits, `let mut` and `mut` patterns, Ref[T], string escapes,
 type aliases, `for (k, v)`, From, `while let`, labeled loops, Default, method chains across
-lines). The compiler is a path dependency, so its parser and checker are always the
+lines, dotted imports: `import core.sys`, `import std.{bytes, fs as files}`,
+`import std.encoding as enc`, the namespace `import std` with `std.bytes.eq(x)`, a package's
+own modules by its name). The compiler is a path dependency, so its parser and checker are always the
 checkout's; what the analyzer adds on top (the stand-in, completion lists, hover texts) is
 updated in the same wave as a syntax or IDE-visible change: eider-lang's `scripts/verify.sh`
 rebuilds and tests this repository (the "tools" leg, `scripts/check-tools.sh`).
@@ -45,9 +47,10 @@ Needs an [eider-lang](../eider-lang) checkout and a C11 compiler; nothing else.
 EIDER_LANG=/path/to/eider-lang sh scripts/build.sh   # default: ../eider-lang
 ```
 
-The sources import their dependencies by package name (`import "eiderc/ide"`,
-`import "json"`, `import "std/fs"`), which the compiler resolves through `eider.lock`
-(eider-lang docs/compiler.md, "C8.3: packages and modules"); there is no `deps/` link farm.
+The sources import their dependencies by package name (`import eiderc.ide`, `import json`,
+`import std.fs`, and their own modules as `import eider_analyzer.lsp_model as m`), which the
+compiler resolves through `eider.lock` (eider-lang docs/compiler.md, "C8.3: packages and
+modules" and "C8.26: dotted imports"); there is no `deps/` link farm.
 `scripts/build.sh` runs `eider-lang/scripts/eider-pkg -C . fetch`, builds `target/eiderc`
 from eider-lang's `compiler/` (package imports need a compiler newer than its seed) and then
 `target/bin/eider-analyzer`.
@@ -148,12 +151,16 @@ and quick fixes, navigation, symbols/folding/semantic tokens, completion, UTF-16
 non-ASCII text, packages, malformed input, the syntax since C8.2 (`fixtures/syntax.ei`:
 no diagnostics, aliases in the outline and hover, prelude and Ref hover and completion,
 navigation through `let mut` and `mut` patterns) and the new codes with their fixes
-(`fixtures/codes.ei`: E0002, E0307, E0306, E0308), and loop labels (`fixtures/labels.ei`:
-the outline, definition, references, hover). `tests/debounce.sh` sends 40 changes in a burst
+(`fixtures/codes.ei`: E0002, E0307, E0306, E0308), loop labels (`fixtures/labels.ei`:
+the outline, definition, references, hover), and dotted imports (`fixtures/dotted/`, a
+package of its own: every form with no diagnostics, hover and definition on path segments
+and namespace uses, folding, completion of module paths). Paths into the toolchain are
+written `${EIDER_LANG}` in the goldens. `tests/debounce.sh` sends 40 changes in a burst
 and checks they cost one analysis; `tests/clean.sh` opens every `.ei` file of eider-lang's
 `examples/` and `std/` and fails on any diagnostic (they build, so one would be the
 analyzer lagging the language); `tests/lexical.sh` compares the lexical stand-in's analysis
-(`eider-analyzer --dump-lexical`) of `tests/lexical/*.ei` with golden files; `tests/perf.sh` prints the time of every request on
+(`eider-analyzer --dump-lexical`) of `tests/lexical/*.ei` (`fixtures/syntax.ei` and
+`fixtures/dotted/lexical.ei`) with golden files; `tests/perf.sh` prints the time of every request on
 eider-lang's `compiler/check.ei` and `compiler/main.ei` (the whole compiler).
 
 ## License

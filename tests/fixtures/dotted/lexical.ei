@@ -1,0 +1,20 @@
+// The lexical stand-in on every form of dotted import (docs/compiler.md, "C8.26"), linked as
+// tests/lexical/dotted.ei: a module path, an alias, a group across lines with a trailing
+// comma (a member below the package's top too), the std namespace and its uses, the
+// package's own modules by its name. Small toolchain modules keep the golden short.
+import std.env
+import std.io as out
+import dotted.{
+    util as u,
+    lib.shapes,
+}
+import std
+
+fn pick() -> shapes.Shape { shapes.Square(u.double(env.args().len() as i32)) }
+
+fn main() uses io {
+    out.outln(env.args()[0])
+    print(shapes.area(pick()))
+    let n = std.random.below(6).unwrap_or(0)
+    print(n)
+}

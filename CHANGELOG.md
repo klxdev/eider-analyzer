@@ -4,8 +4,37 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
-## Unreleased
+## 0.1.1
 
+Dotted imports (eider-lang issue #91, docs/compiler.md "C8.26"): `import core.sys`,
+`import std.{bytes, fs as files}` (across lines, a trailing comma), `import std.encoding as enc`,
+the package namespace `import std` with `std.bytes.eq(x)` and `std.time.Duration`, a
+dependency's modules (`import json`, `import json.stream`) and the package's own by its name
+(`import eider_analyzer.lsp_model as m`). The quoted form still works.
+
+- The lexical stand-in reads every form: a module symbol per group member, aliases, package
+  namespaces and the modules their uses imply, the package's own modules and its path and
+  git dependencies (eider.toml, eider.lock); `std.time.Duration` refers to the module and its
+  item, the last segment of an aliased import to the import.
+- Definition and hover on path segments: an import's last segment and alias, and the module
+  segment of a namespace use (`bytes` of `std.bytes.eq`), go to the module; hover shows its
+  dotted name (`module std.bytes`), and `std` of `import std` what a namespace is. In the
+  stand-in, definition on an import goes to its module's file for dotted paths too.
+- Completion of module paths: after `import ` (std, core, the package, its dependencies),
+  after `import a.` and inside a group's `{ }` (the modules and directories of modules of
+  `a`), and in code after a namespace (`std.`: std's modules; `std.time.`: the module's items).
+  Namespaces are offered among the names in scope.
+- Folding: runs of import statements, a group across lines included.
+- Module aliases for completion leave out the path segments that bind no name (`fs` of
+  `import std.fs as files`, `bytes` of `std.bytes.eq`).
+- An item before a use through a namespace gets a full span that ends before it starts from
+  ide.ei (the use's implied import counts as the next item); the adapter ends it at the item's
+  last line again, so the outline, folding and completion of locals keep working.
+- The sources import in the dotted form (`eiderc migrate-imports`).
+- Tests: a session on fixtures/dotted/ (a package of its own: no diagnostics, hover and
+  definition on path segments and namespace uses, folding, outline, semantic tokens,
+  completion of module paths) and the stand-in on fixtures/dotted/lexical.ei; paths into the
+  toolchain are `${EIDER_LANG}` in the goldens.
 - Loop labels (`outer: for ...`, eider-lang `SK_LABEL`) in the outline under their function
   (LSP kind Key, detail `outer: for`), with definition, references and hover from `break
   outer` / `continue outer` (tests/sessions/labels.jsonl).

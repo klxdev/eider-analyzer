@@ -7,17 +7,17 @@
 // a request needs the document's analysis. With `sync` (tests) a document is analysed right
 // after every open, change and save, so output order doesn't depend on timing.
 
-import "core/sys"
-import "std/bytes"
-import "std/fs"
-import "std/io"
-import "json"
-import "lsp_model.ei" as m
-import "lsp_text.ei" as t
-import "lsp_rpc.ei" as rpc
-import "lsp_features.ei" as feat
-import "lsp_analysis.ei" as analysis
-import "lsp_version.ei" as ver
+import core.sys
+import std.bytes
+import std.fs
+import std.io
+import json
+import eider_analyzer.lsp_model as m
+import eider_analyzer.lsp_text as t
+import eider_analyzer.lsp_rpc as rpc
+import eider_analyzer.lsp_features as feat
+import eider_analyzer.lsp_analysis as analysis
+import eider_analyzer.lsp_version as ver
 
 pub type Doc = { uri: List[u8], path: List[u8], version: i64, text: List[u8], starts: List[u32], dirty: bool, root: List[u8] }
 
@@ -490,7 +490,7 @@ fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8])
     if is(method, "textDocument/completion") {
         let i = find_doc(s, uri)
         let doc = s.docs[i as usize]
-        return rpc.result(id, feat.completion(res, doc.text, doc.starts, pos_param(d, params)))
+        return rpc.result(id, feat.completion(res, doc.path, doc.text, doc.starts, pos_param(d, params)))
     }
     // textDocument/codeAction
     let rg = g(d, params, "range")

@@ -1,0 +1,22 @@
+// every form of dotted import (docs/compiler.md, "C8.26"): a module path, a group across
+// lines with a trailing comma, an alias, the std namespace, the package's own modules
+import core.sys
+import std.{
+    bytes,
+    fs as files,
+}
+import std.encoding as enc
+import std
+import dotted.util
+import dotted.{lib.shapes as sh}
+
+fn wait() -> std.time.Duration { std.time.millis(5) }
+
+fn main() uses io, fs {
+    print(bytes.eq(sys.lit("a"), sys.lit("a")))
+    print(files.exists(sys.lit("x")))
+    print(enc.hex(sys.lit("ab")))
+    print(std.strings.repeat("ab", 2))
+    print(util.double(2) + sh.area(sh.Square(2)))
+    print(wait().ns)
+}

@@ -5,7 +5,7 @@
 #
 # The toolchain is the eider-lang checkout $EIDER_LANG (default: ../eider-lang next to this
 # repository), the one eider.toml's path dependencies point into. The sources import their
-# dependencies by package name (`import "eiderc/ide"`, `import "json"`, `import "std/fs"`),
+# dependencies by package name (`import eiderc.ide`, `import json`, `import std.fs`),
 # which the compiler resolves through eider.lock: there is no deps/ link farm. Package
 # imports need an eiderc newer than eider-lang's seed (until the seed knows them), so this
 # builds target/eiderc from the checkout's compiler/ with its scripts/ei (only a C11

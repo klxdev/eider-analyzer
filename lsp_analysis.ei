@@ -1,5 +1,5 @@
 // lsp_analysis: the adapter between the server and the compiler. It is the only module that
-// imports the compiler package (`import "eiderc/ide"`); everything else sees lsp_model.ei.
+// imports the compiler package (`import eiderc.ide`); everything else sees lsp_model.ei.
 //
 // `analyze` calls the compiler's IDE entry point, `ide.analyze` (compiler/ide.ei): the
 // passes of `eiderc check` with the program's symbols, references and types recorded. The
@@ -14,17 +14,19 @@
 // lsp_standin.ei, a lexical scan of the compiler's tokens, so completion, outline and
 // navigation keep working. (That scan was the stand-in used before ide.ei existed.)
 
-import "core/sys"
-import "std/bytes"
-import "std/fs"
-import "eiderc/intern"
-import "eiderc/lex"
-import "eiderc/resolve"
-import "eiderc/diag"
-import "eiderc/ide"
-import "lsp_model.ei" as m
-import "lsp_standin.ei" as standin
-import "lsp_text.ei" as txt
+import core.sys
+import std.bytes
+import std.fs
+import std.env
+import eiderc.intern
+import eiderc.lex
+import eiderc.lock
+import eiderc.resolve
+import eiderc.diag
+import eiderc.ide
+import eider_analyzer.lsp_model as m
+import eider_analyzer.lsp_standin as standin
+import eider_analyzer.lsp_text as txt
 
 /// Analyse the program whose entry file is `entry` (an absolute path). `overlay_texts[i]` is
 /// the text to use for `overlay_paths[i]` instead of what is on disk (unsaved buffers).
@@ -42,6 +44,7 @@ pub fn analyze(entry: List[u8], overlay_paths: List[List[u8]], overlay_texts: Li
         a.symbols.push(m.Symbol(s.name, s.kind, sp, full, c, s.detail))
     }
     alias_details(inout a, overlay_paths, overlay_texts)
+    item_ends(inout a, overlay_paths, overlay_texts)
     for r in x.refs {
         let sp = span_of(inout a, inout last, r.span)
         a.refs.push(m.Ref(sp, r.target))
@@ -104,6 +107,48 @@ fn alias_details(inout a: m.Analysis, overlay_paths: List[List[u8]], overlay_tex
             }
             None => {}
         }
+    }
+}
+
+/// ide.ei ends an item's full span at the token before the next item, and the imports a
+/// namespace use implies (`std.time.Duration`; parse.ei's IMPORT_IMPLIED) are items after
+/// the file's last one, at the use: so an item before one ends before it starts. Such a
+/// span ends here at the last line before the next item (or the end of the file) that is
+/// neither blank nor a comment.
+fn item_ends(inout a: m.Analysis, overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) uses fs {
+    for i in 0..a.symbols.len() {
+        let x = a.symbols[i].copy()
+        let f = x.full
+        if x.container != m.NONE || x.kind == m.SK_MODULE { continue }
+        if f.end_line > f.line || (f.end_line == f.line && f.end_col >= f.col) { continue }
+        if (f.file as usize) >= a.files.len() { continue }
+        let src: List[u8] = match text_of(a.files[f.file as usize], overlay_paths, overlay_texts) {
+            Some(t) => t
+            None => { continue }
+        }
+        let lines = bytes.split(src, 10)
+        // the next item of the file
+        let mut next = (lines.len() + 1) as u32
+        for y in a.symbols {
+            if y.full.file == f.file && y.container == m.NONE && y.kind != m.SK_MODULE && y.full.line > f.line && y.full.line < next { next = y.full.line }
+        }
+        let mut l = next - 1
+        while l > f.line {
+            let t = bytes.trim(lines[(l - 1) as usize])
+            if t.len() > 0 && !bytes.starts_with(t, sys.lit("//")) { break }
+            l -= 1
+        }
+        let text = lines[(l - 1) as usize]
+        let mut cols: u32 = 1
+        let mut n = text.len()
+        while n > 0 && (text[n - 1] == 32 || text[n - 1] == 9 || text[n - 1] == 13) { n -= 1 }
+        for k in 0..n {
+            if text[k] < 128 || text[k] >= 192 { cols += 1 }
+        }
+        let mut y = x.copy()
+        y.full.end_line = l
+        y.full.end_col = cols
+        a.symbols[i] = y
     }
 }
 
@@ -218,15 +263,275 @@ pub fn norm(path: List[u8]) -> List[u8] {
     out
 }
 
+// ---- packages and module paths (docs/compiler.md, "C8.3" and "C8.26")
+//
+// What the stand-in and completion need to know about imports without loading a program:
+// the package a file is in (the nearest eider.toml, read with the compiler's own reader),
+// the directory of a package it may import (std and core in the toolchain; itself; a
+// dependency through eider.lock: a path, or a git package's store copy or vendor/ copy, as
+// resolve.ei's `locate` finds them), and the file a dotted path names.
+
+/// A package as its eider.toml says (`name` empty: no package, or one whose eider.toml
+/// can't be read; `dir` is then where the search stopped, or empty).
+pub type Pkg = { dir: List[u8], name: List[u8], entry: List[u8], deps: List[List[u8]] }
+
+/// The package of `file`: the nearest directory at or above it with an eider.toml.
+pub fn package_of(file: List[u8]) -> Pkg uses fs {
+    let none: List[u8] = List.new()
+    let mut dir = dir_of(file)
+    while dir.len() > 0 {
+        let mf = join(dir, sys.lit("eider.toml"))
+        if fs.exists(mf) {
+            let src: List[u8] = match fs.read(mf) {
+                Ok(t) => t
+                Err(_) => List.new()
+            }
+            return match lock.manifest(src) {
+                Ok(x) => Pkg(dir, x.name, x.entry, x.deps)
+                Err(_) => Pkg(dir, none, none, List.new())
+            }
+        }
+        if dir.len() == 1 { break }
+        dir = dir_of(dir)
+    }
+    Pkg(none, none, none, List.new())
+}
+
+fn is_toolchain(head: List[u8]) -> bool { bytes.eq(head, sys.lit("std")) || bytes.eq(head, sys.lit("core")) }
+
+fn join(a: List[u8], b: List[u8]) -> List[u8] {
+    if b.len() > 0 && b[0] == 47 { return b }
+    let mut out = a.copy()
+    if out.len() == 0 || out[out.len() - 1] != 47 { out.push(47) }
+    bytes.append(inout out, b)
+    out
+}
+
+/// The directory of package `head` as a module of `pk` imports it (std, core, `pk` itself,
+/// one of its dependencies), or empty.
+pub fn package_dir(pk: Pkg, head: List[u8]) -> List[u8] uses io, fs {
+    let none: List[u8] = List.new()
+    if is_toolchain(head) { return join(resolve.toolchain_root(), head) }
+    if pk.name.len() == 0 { return none }
+    if bytes.eq(head, pk.name) { return pk.dir }
+    let mut dep = false
+    for d in pk.deps {
+        if bytes.eq(d, head) { dep = true }
+    }
+    if !dep { return none }
+    let src: List[u8] = match fs.read(join(pk.dir, sys.lit("eider.lock"))) {
+        Ok(t) => t
+        Err(_) => { return none }
+    }
+    let locked = match lock.lockfile(src) {
+        Ok(x) => x
+        Err(_) => { return none }
+    }
+    for e in locked {
+        if !bytes.eq(e.name, head) { continue }
+        if !e.git { return norm(join(pk.dir, e.path)) }
+        let vendored = join(join(pk.dir, sys.lit("vendor")), head)
+        if fs.is_dir(vendored) { return vendored }
+        return join(join(eider_home(), sys.lit("pkg")), lock.store_leaf(head, e.hash))
+    }
+    none
+}
+
+/// $EIDER_HOME, else ~/.eider (where eider-pkg keeps git packages).
+fn eider_home() -> List[u8] uses io, fs {
+    match env.get(sys.lit("EIDER_HOME")) {
+        Some(h) => {
+            if h.len() > 0 { return absolute(h) }
+        }
+        None => {}
+    }
+    match env.get(sys.lit("HOME")) {
+        Some(h) => join(h, sys.lit(".eider"))
+        None => sys.lit(".eider")
+    }
+}
+
+/// The file the module path `path` (`a/b/c`: a dotted import's segments, or a quoted
+/// package import) names from `from` (a file of package `pk`), or empty: `std/x` and
+/// `core/x` in the toolchain; in a package, `a` this package or a dependency, `a/b/c` its
+/// file b/c.ei and `a` alone its entry module; in no package, the file a/b/c.ei beside
+/// `from`. A namespace (`std` alone) names no file.
+pub fn dotted_file(pk: Pkg, from: List[u8], path: List[u8]) -> List[u8] uses io, fs {
+    let none: List[u8] = List.new()
+    let segs = bytes.split(path, 47)
+    if segs.len() == 0 || segs[0].len() == 0 { return none }
+    let head = segs[0]
+    if pk.name.len() == 0 && !is_toolchain(head) { return norm(join(dir_of(from), bytes.concat(path, sys.lit(".ei")))) }
+    let dir = package_dir(pk, head)
+    if dir.len() == 0 { return none }
+    if segs.len() > 1 {
+        let rest = bytes.slice(path, head.len() + 1, path.len())
+        return norm(join(dir, bytes.concat(rest, sys.lit(".ei"))))
+    }
+    if is_toolchain(head) { return none }
+    if bytes.eq(head, pk.name) { return norm(join(dir, pk.entry)) }
+    let dp = package_of(join(dir, sys.lit("x.ei")))
+    if dp.name.len() > 0 && bytes.eq(dp.dir, dir) { return norm(join(dir, dp.entry)) }
+    norm(join(dir, bytes.concat(head, sys.lit(".ei"))))
+}
+
+/// A module path's dotted name for a reader: `std.bytes` for the toolchain's std/bytes.ei,
+/// `app.lib.shapes` for lib/shapes.ei of package `app`, a package's name for its entry
+/// module, the stem for a file in no package.
+pub fn module_label(file: List[u8]) -> List[u8] uses fs {
+    let pk = package_of(file)
+    let st = standin.stem(file)
+    if pk.name.len() == 0 || !bytes.starts_with(file, pk.dir) || file.len() <= pk.dir.len() + 1 { return st }
+    let rel = bytes.slice(file, pk.dir.len() + 1, file.len())
+    if !is_toolchain(pk.name) && bytes.eq(rel, pk.entry) { return pk.name }
+    let mut out = pk.name.copy()
+    out.push(46)
+    let inner = if bytes.ends_with(rel, sys.lit(".ei")) { bytes.slice(rel, 0, rel.len() - 3) } else { rel }
+    bytes.append(inout out, standin.dots(inner))
+    out
+}
+
+/// A completion for a module path: a module (a .ei file), a directory of modules, or a
+/// package (`kind`: MN_MODULE, MN_DIR, MN_PACKAGE), with a detail to show.
+pub type ModName = { name: List[u8], kind: u32, detail: List[u8] }
+
+pub const MN_MODULE: u32 = 0
+pub const MN_DIR: u32 = 1
+pub const MN_PACKAGE: u32 = 2
+
+/// What can follow `import ` in `from`: std, core, then the package's own name and its
+/// dependencies (eider.toml), or in no package the modules beside the file.
+pub fn import_heads(from: List[u8]) -> List[ModName] uses io, fs {
+    let pk = package_of(from)
+    let mut out: List[ModName] = List.new()
+    out.push(ModName(sys.lit("std"), MN_PACKAGE, sys.lit("package: the standard library (toolchain)")))
+    out.push(ModName(sys.lit("core"), MN_PACKAGE, sys.lit("package: the core library (toolchain)")))
+    if pk.name.len() == 0 {
+        for x in list_modules(dir_of(from), List.new(), from) { out.push(x) }
+        return out
+    }
+    if !is_toolchain(pk.name) { out.push(ModName(pk.name, MN_PACKAGE, sys.lit("package: this one"))) }
+    for d in pk.deps {
+        if !bytes.eq(d, pk.name) { out.push(ModName(d, MN_PACKAGE, sys.lit("package: a dependency"))) }
+    }
+    out
+}
+
+/// The modules and directories of modules below the module path `segs` (`std`,
+/// `app.lib`), as `from` imports them.
+pub fn modules_below(from: List[u8], segs: List[List[u8]]) -> List[ModName] uses io, fs {
+    let none: List[ModName] = List.new()
+    if segs.len() == 0 { return none }
+    let pk = package_of(from)
+    let head = segs[0]
+    let mut dir: List[u8] = List.new()
+    if pk.name.len() == 0 && !is_toolchain(head) {
+        dir = join(dir_of(from), head)
+    } else {
+        dir = package_dir(pk, head)
+    }
+    if dir.len() == 0 { return none }
+    for i in 1..segs.len() { dir = join(dir, segs[i]) }
+    list_modules(dir, segs, from)
+}
+
+/// The modules (.ei files) and directories holding modules in `dir`, sorted, a name that
+/// is both once (as the module); `segs` is the path written before them, for the detail.
+/// Not listed: names that aren't identifiers (a keyword, `my-file`), hidden entries,
+/// `target`, `vendor`, `deps`, directories of other packages (their own eider.toml) and the
+/// importing file `from` itself.
+fn list_modules(dir: List[u8], segs: List[List[u8]], from: List[u8]) -> List[ModName] uses fs {
+    let mut out: List[ModName] = List.new()
+    let entries = match fs.list(dir) {
+        Ok(x) => x
+        Err(_) => { return out }
+    }
+    let mut names = intern.new()
+    let mut pre = bytes.join(segs, sys.lit("."))
+    if pre.len() > 0 { pre.push(46) }
+    let mut mods: List[List[u8]] = List.new()
+    let mut dirs: List[List[u8]] = List.new()
+    for e in entries {
+        if e.len() == 0 || e[0] == 46 { continue }
+        let full = join(dir, e)
+        if bytes.ends_with(e, sys.lit(".ei")) && e.len() > 3 {
+            let st = bytes.slice(e, 0, e.len() - 3)
+            if segment(inout names, st) && !fs.is_dir(full) && !bytes.eq(norm(full), from) { mods.push(st) }
+            continue
+        }
+        if bytes.eq(e, sys.lit("target")) || bytes.eq(e, sys.lit("vendor")) || bytes.eq(e, sys.lit("deps")) { continue }
+        if !segment(inout names, e) || !fs.is_dir(full) { continue }
+        if fs.exists(join(full, sys.lit("eider.toml"))) { continue }
+        if has_modules(full, 3) { dirs.push(e) }
+    }
+    for x in mods { out.push(ModName(x, MN_MODULE, bytes.concat(pre, x))) }
+    for x in dirs {
+        let mut dup = false
+        for y in mods {
+            if bytes.eq(x, y) { dup = true }
+        }
+        if !dup { out.push(ModName(x, MN_DIR, bytes.concat(bytes.concat(pre, x), sys.lit(".")))) }
+    }
+    out
+}
+
+/// Whether `s` can be a segment of a module path: an identifier that isn't a keyword.
+fn segment(inout names: intern.Interner, s: List[u8]) -> bool {
+    if s.len() == 0 || bytes.is_digit(s[0]) { return false }
+    for c in s {
+        if !bytes.is_ident(c) { return false }
+    }
+    intern.intern(inout names, s, 0, s.len()) > intern.LAST_KEYWORD
+}
+
+/// Whether `dir` holds a .ei file, at most `depth` directories down.
+fn has_modules(dir: List[u8], depth: u32) -> bool uses fs {
+    let entries = match fs.list(dir) {
+        Ok(x) => x
+        Err(_) => { return false }
+    }
+    for e in entries {
+        if bytes.ends_with(e, sys.lit(".ei")) { return true }
+    }
+    if depth == 0 { return false }
+    for e in entries {
+        if e.len() == 0 || e[0] == 46 { continue }
+        let full = join(dir, e)
+        if fs.is_dir(full) && has_modules(full, depth - 1) { return true }
+    }
+    false
+}
+
+/// The import statements of a document's text, every module they name (the compiler's
+/// lexer, recovering from lex errors, and the stand-in's import scan).
+pub fn imports_in(src: List[u8]) -> List[m.Import] {
+    let mut names = intern.new()
+    let lx = lex.lex_all(src, inout names)
+    let f = file_of(0, src, lx.lexed)
+    let mut out: List[m.Import] = List.new()
+    if f.toks.len() == 0 { return out }
+    for d in standin.import_decls(f, names.names) {
+        let alias: List[u8] = if d.alias == m.NONE { List.new() } else { names.names[d.alias as usize] }
+        let a = standin.tok_span(f, d.kw)
+        let z = standin.tok_span(f, d.stmt_end)
+        out.push(m.Import(d.form, d.path, alias, standin.tok_span(f, d.at), standin.tok_span(f, d.last), m.Span(0, a.line, a.col, z.end_line, z.end_col)))
+    }
+    out
+}
+
 // ---- the lexical stand-in (lsp_standin.ei) for symbols, references and types
 
 /// Lex `src` as file `id`; None if the lexer fails.
 fn lex_file(id: u32, src: List[u8], inout names: intern.Interner) -> Option[standin.File] {
     let r = lex.lex(src, inout names)
-    let lx = match r {
-        lex.Done(l) => l
-        _ => { return None }
+    match r {
+        lex.Done(l) => Some(file_of(id, src, l))
+        _ => None
     }
+}
+
+/// The stand-in's tokens of a lexed file.
+fn file_of(id: u32, src: List[u8], lx: lex.Lexed) -> standin.File {
     let mut toks: List[standin.Tok] = List.new()
     for t in lx.toks {
         let mut kind = standin.TK_PUNCT
@@ -252,36 +557,7 @@ fn lex_file(id: u32, src: List[u8], inout names: intern.Interner) -> Option[stan
         }
         toks.push(standin.Tok(kind, sym, p, t.start, t.end, t.line, t.col, t.end_col))
     }
-    Some(standin.File(id, src, toks, lx.strs))
-}
-
-/// `import "x"` paths of a lexed file with their alias name ids (the stem's when there is
-/// no `as`), from the top level.
-type Imp = { path: List[u8], alias: u32 }
-
-fn imports_of(f: standin.File, inout names: intern.Interner) -> List[Imp] {
-    let mut out: List[Imp] = List.new()
-    let mut i: usize = 0
-    let mut depth: i32 = 0
-    while i + 1 < f.toks.len() {
-        let t = f.toks[i]
-        if t.kind == standin.TK_PUNCT && t.p == 123 { depth += 1 }
-        if t.kind == standin.TK_PUNCT && t.p == 125 { depth -= 1 }
-        // `import` is keyword 23
-        if depth == 0 && t.kind == standin.TK_IDENT && t.sym == 23 && f.toks[i + 1].kind == standin.TK_STR {
-            let path = f.strs[f.toks[i + 1].sym as usize]
-            let mut alias: u32 = 0
-            if i + 3 < f.toks.len() && f.toks[i + 2].kind == standin.TK_IDENT && f.toks[i + 2].sym == 17 && f.toks[i + 3].kind == standin.TK_IDENT {
-                alias = f.toks[i + 3].sym
-            } else {
-                let st = standin.stem(path)
-                alias = intern.intern(inout names, st, 0, st.len())
-            }
-            out.push(Imp(path, alias))
-        }
-        i += 1
-    }
-    out
+    standin.File(id, src, toks, lx.strs)
 }
 
 /// A package import (`"json"`, `"std/fs"`): no `.` and not absolute (docs/compiler.md, "C8.3").
@@ -311,6 +587,16 @@ fn dir_of(path: List[u8]) -> List[u8] {
     }
 }
 
+/// The file an import of the entry file `path` (in package `pk`) loads, or empty.
+fn import_target(pk: Pkg, path: List[u8], d: standin.ImpDecl) -> List[u8] uses io, fs {
+    if d.form == m.IM_NAMESPACE { return List.new() }
+    if d.form != m.IM_QUOTED || package_import(d.path) { return dotted_file(pk, path, d.path) }
+    let mut p = d.path.copy()
+    if !(p.len() > 0 && p[0] == 47) { p = join(dir_of(path), p) }
+    if !has_ext(p) { bytes.append(inout p, sys.lit(".ei")) }
+    norm(p)
+}
+
 fn lexical(inout a: m.Analysis, path: List[u8], src: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) uses io, fs {
     let mut names = intern.new()
     let entry = match lex_file(0, src, inout names) {
@@ -320,25 +606,34 @@ fn lexical(inout a: m.Analysis, path: List[u8], src: List[u8], overlay_paths: Li
     let mut out = standin.new_out()
     let mut mods: List[standin.ModFile] = List.new()
     let none: List[standin.ModFile] = List.new()
-    let dir = dir_of(path)
-    for imp in imports_of(entry, inout names) {
-        let mut p = imp.path.copy()
-        if package_import(p) {
-            // `"std/fs"`, `"core/sys"`: the toolchain's (docs/compiler.md, "C8.3"); other
-            // packages need eider.lock, which this scan doesn't read
-            if !(bytes.starts_with(p, sys.lit("std/")) || bytes.starts_with(p, sys.lit("core/"))) { continue }
-            let mut j = resolve.toolchain_root()
-            j.push(47)
-            bytes.append(inout j, p)
-            p = j
-        } else if !(p.len() > 0 && p[0] == 47) {
-            let mut j = dir.copy()
-            j.push(47)
-            bytes.append(inout j, p)
-            p = j
+    // imports resolve from where the file really is (a symlink: its target), as the compiler's do
+    let from: List[u8] = match fs.canonical(path) {
+        Ok(c) => norm(c)
+        Err(_) => path
+    }
+    let pk = package_of(from)
+    // the imports, then the modules uses through a namespace imply (`std.time.Duration`)
+    let mut decls = standin.import_decls(entry, names.names)
+    for d in standin.namespace_uses(entry, names.names, decls) { decls.push(d) }
+    for d in decls {
+        let p = import_target(pk, from, d)
+        if p.len() == 0 { continue }
+        let mut alias = d.alias.copy()
+        if alias == m.NONE {
+            let st = standin.stem(d.path)
+            alias = intern.intern(inout names, st, 0, st.len())
         }
-        if !has_ext(p) { bytes.append(inout p, sys.lit(".ei")) }
-        p = norm(p)
+        // a module imported twice is scanned once
+        let mut again = m.NONE
+        for k in 0..mods.len() {
+            let f = mods[k].file
+            if again == m.NONE && (f as usize) < a.files.len() && bytes.eq(a.files[f as usize], p) { again = k as u32 }
+        }
+        if again != m.NONE {
+            let mf = mods[again as usize]
+            mods.push(standin.ModFile(alias, mf.file, d.ns, mf.msym))
+            continue
+        }
         let text = match text_of(p, overlay_paths, overlay_texts) {
             Some(t) => t
             None => { continue }
@@ -347,7 +642,8 @@ fn lexical(inout a: m.Analysis, path: List[u8], src: List[u8], overlay_paths: Li
         match lex_file(id, text, inout names) {
             Some(f) => {
                 let ignored = standin.scan(f, names.names, false, inout out, none)
-                mods.push(standin.ModFile(imp.alias, id))
+                let msym = standin.module_sym(inout out, id, standin.stem(p), p)
+                mods.push(standin.ModFile(alias, id, d.ns, msym))
             }
             None => {}
         }

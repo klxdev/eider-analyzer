@@ -10,7 +10,8 @@
 # messages doesn't depend on timing) with the framed script on stdin (tests/lsp_wire.ei
 # frames it). stdout is deframed to one message per line and compared with <name>.out;
 # stderr (the server's log) with <name>.err when that file exists; the exit code with the
-# `# exit N` line of the script (default 0). tests/debounce.sh, tests/clean.sh (no
+# `# exit N` line of the script (default 0); paths into the toolchain are written
+# ${EIDER_LANG}. tests/debounce.sh, tests/clean.sh (no
 # diagnostics on eider-lang's examples/ and std/), tests/lexical.sh (the lexical stand-in) and
 # tests/perf.sh are run after the sessions.
 cd "$(dirname "$0")/.." || exit 1
@@ -35,7 +36,9 @@ for s in tests/sessions/*.jsonl; do
   "$wire" frame "$root/tests" < "$s" > "$T/$name.in" || { echo "FAIL $name: cannot frame"; fail=1; continue; }
   "$server" --sync < "$T/$name.in" > "$T/$name.raw" 2> "$T/$name.stderr"
   code=$?
-  "$wire" deframe "$root/tests" < "$T/$name.raw" > "$T/$name.got"
+  # the toolchain's files (std, core) as ${EIDER_LANG}: the checkout, or target/ when the
+  # server finds the toolchain above its own directory (EIDER_ROOT unset)
+  "$wire" deframe "$root/tests" < "$T/$name.raw" | sed -e "s|$toolchain/|\${EIDER_LANG}/|g" -e "s|$root/target/|\${EIDER_LANG}/|g" > "$T/$name.got"
   sed "s|$root/tests|\${ROOT}|g" "$T/$name.stderr" > "$T/$name.errgot"
   if [ -n "$BLESS" ]; then
     cp "$T/$name.got" "tests/sessions/$name.out"

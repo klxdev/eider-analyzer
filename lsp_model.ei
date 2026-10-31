@@ -45,6 +45,24 @@ pub type Diag = { code: List[u8], file: u32, line: u32, col: u32, msg: List[u8],
 
 pub type Analysis = { diags: List[Diag], symbols: List[Symbol], refs: List[Ref], types: List[TypeAt], files: List[List[u8]] }
 
+/// Import forms (eider-lang compiler/parse.ei's IMPORT_*; docs/compiler.md, "C8.26"): the
+/// quoted `import "std/fs"` (deprecated), a dotted module path `import std.fs` (also one
+/// member of a group, `import std.{bytes, fs}`), a package namespace `import std`, and the
+/// import a namespace use implies (`std.time.Duration` with `import std`).
+pub const IM_QUOTED: u32 = 0
+pub const IM_DOTTED: u32 = 1
+pub const IM_NAMESPACE: u32 = 2
+pub const IM_IMPLIED: u32 = 3
+
+/// One module an import names, as written in a document (lsp_analysis.imports_in): `path`
+/// the quoted string, or the segments joined by `/` (`std/fs`, `std` for a namespace);
+/// `alias` the name it binds (the `as` name, else the last segment; for a quoted import
+/// without `as`, empty: the file stem); `name` the token naming the module (the alias,
+/// else the last segment, else the string); `last` the last segment (or the string);
+/// `stmt` the whole statement, from `import` to its end (a group's `}`). A group has one
+/// Import per member, with the same `stmt`.
+pub type Import = { form: u32, path: List[u8], alias: List[u8], name: Span, last: Span, stmt: Span }
+
 pub fn empty() -> Analysis { Analysis(List.new(), List.new(), List.new(), List.new(), List.new()) }
 
 pub fn span(file: u32, line: u32, col: u32, end_line: u32, end_col: u32) -> Span { Span(file, line, col, end_line, end_col) }

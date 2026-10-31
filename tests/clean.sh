@@ -4,7 +4,7 @@
 # server, one at a time, and every publishDiagnostics it sends must be empty. These files
 # build with the current compiler, so any diagnostic is the analyzer lagging the language
 # (for example "expected `=`" on `let mut`, before the analyzer was rebuilt for C8.6).
-# Also fixtures/syntax.ei, which uses the syntax of docs/compiler.md C8.2 to C8.25.
+# Also fixtures/syntax.ei, which uses the syntax of docs/compiler.md C8.2 to C8.25 (fixtures/dotted/ has C8.26's dotted imports: tests/sessions/dotted.jsonl).
 cd "$(dirname "$0")/.." || exit 1
 root=$(pwd)
 server=$root/target/bin/eider-analyzer

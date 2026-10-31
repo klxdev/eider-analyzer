@@ -6,14 +6,17 @@
 // recognises declarations in the token stream and resolves names by scope, without the type
 // checker:
 //
-// - declarations: imports (module aliases), types, record fields, variants and their named
+// - declarations: imports (module aliases: quoted, dotted, each member of a group, package
+//   namespaces; docs/compiler.md, "C8.26"), types, record fields, variants and their named
 //   fields, functions, methods (in `impl` and `trait` blocks), constants, traits, tests,
 //   parameters (also of closures, `|inout x|`), `let`/`let mut`/`var` locals (also tuple
 //   and variant patterns, `mut x` in them), `for` variables (`for (k, v) in m` too), match-arm
 //   bindings and type aliases (`type Handler = fn(Request) -> Response`);
 // - references: a name resolves to the innermost local declared before it whose block is
 //   still open, else to an item of the file; `alias.Name` to the imported module's public
-//   item; `x.f` to a field or method of x's type when it is known (from an annotation, a
+//   item; `ns.module.Name` through a package namespace (`std.time.Duration` with
+//   `import std`) to the module (the `module` segment) and its public item; the last
+//   segment of an aliased import to the import; `x.f` to a field or method of x's type when it is known (from an annotation, a
 //   `Type(...)`/`Type.f(...)` initialiser, or `self` in an impl), else to the only field or
 //   method of that name;
 // - types: the annotation of parameters, fields, constants and locals, recorded at the
@@ -22,9 +25,9 @@
 // It never fails: syntax it doesn't recognise is skipped. Only the entry file gets locals and
 // references; imported files contribute their items (one level of imports).
 
-import "core/sys"
-import "std/bytes"
-import "lsp_model.ei" as m
+import core.sys
+import std.bytes
+import eider_analyzer.lsp_model as m
 
 pub const TK_IDENT: u32 = 1
 pub const TK_STR: u32 = 2
@@ -112,8 +115,19 @@ pub fn new_out() -> Out {
 /// An import in a file: the path as written and the module symbol.
 pub type Import = { path: List[u8], sym: u32, alias: u32 }
 
-/// An imported module the adapter scanned: the alias's name id and the module's file id.
-pub type ModFile = { alias: u32, file: u32 }
+/// An imported module the adapter scanned: the alias's name id and the module's file id;
+/// for a module a namespace use implies (`time` of `std.time.Duration`), `ns` is the
+/// namespace's alias (`std`), else NONE; `msym` is the module's whole-file symbol (or NONE).
+pub type ModFile = { alias: u32, file: u32, ns: u32, msym: u32 }
+
+/// One module an import statement names (a group names one per member), by token index:
+/// `form` (lsp_model IM_*), `path` the string of a quoted import or the segments joined by
+/// `/`; `alias` the name id it binds (the `as` name, else the last segment; NONE for a
+/// quoted import without `as`); `at` the token naming the module symbol (the alias, else
+/// the last segment, else the string), `last` the last segment (or the string), `kw` the
+/// `import` keyword and `stmt_end` the statement's last token. For IM_IMPLIED (a namespace
+/// use, `namespace_uses`), `ns` is the namespace's alias and the tokens are the use's.
+pub type ImpDecl = { form: u32, path: List[u8], alias: u32, at: usize, last: usize, kw: usize, stmt_end: usize, ns: u32 }
 
 /// A local or parameter of the entry file: visible after token `from` up to token `until`;
 /// `prev` chains to the previous local with the same name.
@@ -144,6 +158,8 @@ type St = {
     imports: List[Import],
     /// methods of `impl` blocks waiting for their type: method symbol * 2^32 + type name id
     pend: List[u64],
+    /// the aliases of package namespaces (`std` of `import std`)
+    nss: List[u32],
 }
 
 // ---- tokens
@@ -384,7 +400,7 @@ fn add_local(inout s: St, at: usize, kind: u32, detail: List[u8], ty: List[u8], 
 pub fn scan(f: File, names: List[List[u8]], entry: bool, inout out: Out, modules: List[ModFile]) -> List[Import] {
     let mut lh: Map[u32, u32] = Map.new()
     let mut dt: Map[u32, bool] = Map.new()
-    let mut s = St(f, names, entry, 0, out, List.new(), List.new(), lh, dt, List.new(), List.new())
+    let mut s = St(f, names, entry, 0, out, List.new(), List.new(), lh, dt, List.new(), List.new(), List.new())
     s.ctx.push(Ctx(C_TOP, m.NONE, m.NONE, m.NONE))
     decls(inout s)
     fix_impls(inout s, modules)
@@ -519,28 +535,239 @@ fn item(inout s: St) {
     }
 }
 
-/// `import "path" [as alias]`: a module symbol named by the alias (or the path's stem, whose
-/// span is then the string).
+/// An import statement at `i` (the `import` keyword): a module symbol per module it names,
+/// named by its alias (or a quoted path's stem, whose span is then the string). Its tokens
+/// are no references, except the last segment of an aliased dotted import, which refers to
+/// the import (as ide.ei's refs do).
 fn import_item(inout s: St, i: usize) {
-    if kind_at(s, i + 1) != TK_STR {
+    let ds = parse_import(s, i)
+    if ds.len() == 0 {
         s.i = i + 1
         return
     }
-    let path = name_of(s, i + 1)
-    let mut at = i + 1
-    if is_kw(s, i + 2, K_AS) && is_name(s, i + 3) { at = i + 3 }
-    let full = range(s, i, at)
-    let d = flat(s, i, at)
-    let sym = add_sym(inout s, m.SK_MODULE, at, full, m.NONE, d, List.new(), m.NONE, m.NONE, false)
-    if at == i + 1 {
-        // named by the stem: fix the symbol's name (the token is the string)
-        let mut x = s.out.symbols[sym as usize].copy()
-        x.name = stem(path)
-        s.out.symbols[sym as usize] = x
+    let end = ds[0].stmt_end
+    for d in ds {
+        let full = if ds.len() == 1 { range(s, i, end) } else { range(s, d.last, d.at) }
+        let mut detail: List[u8] = List.new()
+        if d.form == m.IM_QUOTED {
+            detail = flat(s, i, d.at)
+        } else {
+            detail = sys.lit("import ")
+            bytes.append(inout detail, dots(d.path))
+            if d.at != d.last {
+                bytes.append(inout detail, sys.lit(" as "))
+                bytes.append(inout detail, name_of(s, d.at))
+            }
+        }
+        let sym = add_sym(inout s, m.SK_MODULE, d.at, full, m.NONE, detail, List.new(), m.NONE, m.NONE, false)
+        if d.form == m.IM_QUOTED && d.at == d.last {
+            // named by the stem: fix the symbol's name (the token is the string)
+            let mut x = s.out.symbols[sym as usize].copy()
+            x.name = stem(d.path)
+            s.out.symbols[sym as usize] = x
+        }
+        if d.form == m.IM_NAMESPACE { s.nss.push(d.alias) }
+        if s.entry && d.form != m.IM_QUOTED && d.at != d.last { s.out.refs.push(m.Ref(tspan(s, d.last), sym)) }
+        s.imports.push(Import(d.path, sym, d.alias))
     }
-    let alias = if at == i + 1 { m.NONE } else { tk(s, at).sym }
-    s.imports.push(Import(path, sym, alias))
-    s.i = at + 1
+    // the statement's other tokens (path segments, `as`) are not references
+    let mut k = i.copy()
+    while k <= end {
+        if s.decl_tok.get(k as u32).is_none() { s.decl_tok.insert(k as u32, true) }
+        k += 1
+    }
+    s.i = end + 1
+}
+
+/// `std/fs` -> `std.fs`.
+pub fn dots(path: List[u8]) -> List[u8] {
+    let mut out: List[u8] = List.new()
+    for c in path {
+        if c == 47 { out.push(46) } else { out.push(c) }
+    }
+    out
+}
+
+/// The last token of a module path `a.b.c` starting at the name token j (stopping before
+/// `.{`, `.*` or a `.` at the end of what is typed).
+fn path_end(s: St, j: usize) -> usize {
+    let mut k = j.copy()
+    while is_p(s, k + 1, P_DOT) && is_name(s, k + 2) { k += 2 }
+    k
+}
+
+/// The segments of the path from name token a to b joined by `/`.
+fn path_text(s: St, a: usize, b: usize) -> List[u8] {
+    let mut out: List[u8] = List.new()
+    let mut k = a.copy()
+    while k <= b {
+        if is_name(s, k) {
+            if out.len() > 0 { out.push(47) }
+            bytes.append(inout out, name_of(s, k))
+        }
+        k += 1
+    }
+    out
+}
+
+/// The modules the import statement at `i` (its `import` keyword) names, in order (empty
+/// when it names none, as `import` alone or `import *` while typing):
+///
+///   import "path" [as x]            IM_QUOTED (deprecated)
+///   import a.b.c [as x]             IM_DOTTED
+///   import a.{b, c.d as x,}         IM_DOTTED per member; newlines and a trailing comma
+///                                   allowed, and an unclosed group ends at what isn't one
+///   import std [as x], import core  IM_NAMESPACE
+fn parse_import(s: St, i: usize) -> List[ImpDecl] {
+    let mut out: List[ImpDecl] = List.new()
+    if kind_at(s, i + 1) == TK_STR {
+        let mut at = i + 1
+        let mut alias = m.NONE
+        if is_kw(s, i + 2, K_AS) && is_name(s, i + 3) {
+            at = i + 3
+            alias = tk(s, at).sym
+        }
+        out.push(ImpDecl(m.IM_QUOTED, name_of(s, i + 1), alias, at, i + 1, i, at, m.NONE))
+        return out
+    }
+    if !is_name(s, i + 1) { return out }
+    let last = path_end(s, i + 1)
+    let prefix = path_text(s, i + 1, last)
+    if is_p(s, last + 1, P_DOT) && is_p(s, last + 2, P_LBRACE) {
+        // a group: one module per member
+        let mut j = last + 3
+        let mut end = last + 2
+        while j < s.f.toks.len() {
+            if kind_at(s, j) == TK_NL || is_p(s, j, P_COMMA) {
+                j += 1
+                continue
+            }
+            if is_p(s, j, P_RBRACE) {
+                end = j
+                break
+            }
+            if !is_name(s, j) { break }
+            let ml = path_end(s, j)
+            let mut path = prefix.copy()
+            path.push(47)
+            bytes.append(inout path, path_text(s, j, ml))
+            let mut at = ml.copy()
+            if is_kw(s, ml + 1, K_AS) && is_name(s, ml + 2) { at = ml + 2 }
+            out.push(ImpDecl(m.IM_DOTTED, path, tk(s, at).sym, at, ml, i, 0, m.NONE))
+            end = at
+            j = at + 1
+        }
+        let mut fixed: List[ImpDecl] = List.new()
+        for d in out {
+            let mut x = d.copy()
+            x.stmt_end = end
+            fixed.push(x)
+        }
+        return fixed
+    }
+    let mut at = last.copy()
+    if is_kw(s, last + 1, K_AS) && is_name(s, last + 2) { at = last + 2 }
+    let form = if bytes.eq(prefix, sys.lit("std")) || bytes.eq(prefix, sys.lit("core")) { m.IM_NAMESPACE } else { m.IM_DOTTED }
+    out.push(ImpDecl(form, prefix, tk(s, at).sym, at, last, i, at, m.NONE))
+    out
+}
+
+/// The top-level import statements of file `f` (every module they name, in order).
+pub fn import_decls(f: File, names: List[List[u8]]) -> List[ImpDecl] {
+    let s = bare(f, names)
+    let mut out: List[ImpDecl] = List.new()
+    let mut i: usize = 0
+    let mut depth: i32 = 0
+    while i < s.f.toks.len() {
+        if is_p(s, i, P_LBRACE) { depth += 1 }
+        if is_p(s, i, P_RBRACE) { depth -= 1 }
+        if depth == 0 && is_kw(s, i, K_IMPORT) {
+            let ds = parse_import(s, i)
+            if ds.len() > 0 {
+                for d in ds { out.push(d) }
+                i = ds[0].stmt_end + 1
+                continue
+            }
+        }
+        i += 1
+    }
+    out
+}
+
+/// The modules that uses through a package namespace imply (`std.time.Duration` with
+/// `import std` implies std.time; docs/compiler.md, "C8.26"), each once, at its first use:
+/// IM_IMPLIED with `path` `<package>/<module>`, `alias` the module segment's name id, `ns`
+/// the namespace's alias and `at`/`last` the module segment. `decls` are the file's imports.
+pub fn namespace_uses(f: File, names: List[List[u8]], decls: List[ImpDecl]) -> List[ImpDecl] {
+    let s = bare(f, names)
+    let mut out: List[ImpDecl] = List.new()
+    let mut nss: List[u32] = List.new()
+    let mut heads: List[List[u8]] = List.new()
+    let mut skip: Map[u32, bool] = Map.new()
+    for d in decls {
+        if d.form == m.IM_NAMESPACE {
+            nss.push(d.alias)
+            heads.push(d.path)
+        }
+        let mut k = d.kw.copy()
+        while k <= d.stmt_end {
+            skip.insert(k as u32, true)
+            k += 1
+        }
+    }
+    if nss.len() == 0 { return out }
+    let mut seen: List[List[u8]] = List.new()
+    for i in 0..s.f.toks.len() {
+        if !is_name(s, i) || skip.get(i as u32).is_some() { continue }
+        if i > 0 && is_p(s, i - 1, P_DOT) { continue }
+        if !(is_p(s, i + 1, P_DOT) && is_name(s, i + 2) && is_p(s, i + 3, P_DOT)) { continue }
+        let sym = tk(s, i).sym
+        for k in 0..nss.len() {
+            if nss[k] != sym { continue }
+            let mut path = heads[k].copy()
+            path.push(47)
+            bytes.append(inout path, name_of(s, i + 2))
+            if !contains_path(seen, path) {
+                seen.push(path)
+                out.push(ImpDecl(m.IM_IMPLIED, path, tk(s, i + 2).sym, i + 2, i + 2, i, i + 2, sym))
+            }
+        }
+    }
+    out
+}
+
+fn contains_path(xs: List[List[u8]], x: List[u8]) -> bool {
+    for y in xs {
+        if bytes.eq(y, x) { return true }
+    }
+    false
+}
+
+/// A scan state over `f` with nothing recorded (for the token helpers).
+fn bare(f: File, names: List[List[u8]]) -> St {
+    let mut lh: Map[u32, u32] = Map.new()
+    let mut dt: Map[u32, bool] = Map.new()
+    St(f, names, false, 0, new_out(), List.new(), List.new(), lh, dt, List.new(), List.new(), List.new())
+}
+
+/// The token span of token `i` of file `f` (for the adapter).
+pub fn tok_span(f: File, i: usize) -> m.Span {
+    let t = if i < f.toks.len() { f.toks[i] } else { f.toks[f.toks.len() - 1] }
+    m.Span(f.id, t.line, t.col, t.line, t.end_col)
+}
+
+/// A whole-module symbol for file `file` (as ide.ei has one per module: its span is 1:1-1:1
+/// of the file), public, so references to it survive the adapter's filter.
+pub fn module_sym(inout out: Out, file: u32, name: List[u8], path: List[u8]) -> u32 {
+    let sp = m.Span(file, 1, 1, 1, 1)
+    out.symbols.push(m.Symbol(name, m.SK_MODULE, sp, sp, m.NONE, path))
+    out.sym_type.push(List.new())
+    out.type_tn.push(m.NONE)
+    out.owner_tn.push(m.NONE)
+    out.name_id.push(m.NONE)
+    out.public.push(true)
+    out.next_member.push(m.NONE)
+    (out.symbols.len() - 1) as u32
 }
 
 /// The module name of an import path: the file stem with non-identifier bytes as `_`.
@@ -1002,10 +1229,29 @@ fn member(s: St, i: usize, modules: List[ModFile]) -> u32 {
     let name = tk(s, i).sym
     if i >= 2 && is_name(s, i - 2) {
         let recv = tk(s, i - 2).sym
-        // `alias.Name`: an imported module's public item
-        if i < 3 || !is_p(s, i - 3, P_DOT) {
+        let after_dot = i >= 3 && is_p(s, i - 3, P_DOT)
+        // `ns.module` and `ns.module.Name` through a package namespace (`std.time.Duration`)
+        if !after_dot && s.nss.contains(recv) {
             for mf in modules {
-                if mf.alias == recv {
+                if mf.ns == recv && mf.alias == name { return mf.msym }
+            }
+            return m.NONE
+        }
+        if after_dot && i >= 4 && is_name(s, i - 4) && s.nss.contains(tk(s, i - 4).sym) && (i < 5 || !is_p(s, i - 5, P_DOT)) {
+            let ns = tk(s, i - 4).sym
+            for mf in modules {
+                if mf.ns == ns && mf.alias == recv {
+                    let t = lookup_top(s, mf.file, name)
+                    if t != m.NONE && s.out.public[t as usize] { return t }
+                    return m.NONE
+                }
+            }
+            return m.NONE
+        }
+        // `alias.Name`: an imported module's public item
+        if !after_dot {
+            for mf in modules {
+                if mf.ns == m.NONE && mf.alias == recv {
                     let t = lookup_top(s, mf.file, name)
                     if t != m.NONE && s.out.public[t as usize] { return t }
                     return m.NONE

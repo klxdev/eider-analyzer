@@ -2,12 +2,13 @@
 // it was computed from. Every function returns the JSON text of a `result`; none of them
 // can fail: a position nothing is at gives `null` or an empty list.
 
-import "core/sys"
-import "std/bytes"
-import "json"
-import "lsp_model.ei" as m
-import "lsp_text.ei" as t
-import "lsp_rpc.ei" as rpc
+import core.sys
+import std.bytes
+import json
+import eider_analyzer.lsp_model as m
+import eider_analyzer.lsp_text as t
+import eider_analyzer.lsp_rpc as rpc
+import eider_analyzer.lsp_analysis as analysis
 
 /// An analysis of the document `uri` (file 0): the texts of every file in `an.files` as
 /// they were analysed (empty when unreadable) and their line tables.
@@ -91,8 +92,17 @@ fn hit_at(r: Res, p: t.Pos) -> Hit {
 pub fn definition(r: Res, p: t.Pos) -> List[u8] {
     let h = hit_at(r, p)
     if !h.found { return sys.lit("null") }
+    let s = r.an.symbols[h.sym as usize]
     let mut o: List[u8] = List.new()
-    location_json(inout o, r, r.an.symbols[h.sym as usize].span)
+    if s.kind == m.SK_MODULE && s.span.file == 0 && !whole_module(s) {
+        // the lexical stand-in's import symbol: the module's file, as ide.ei's module symbol is
+        let mf = module_file(r, s)
+        if mf != 0 {
+            location_json(inout o, r, m.Span(mf, 1, 1, 1, 1))
+            return o
+        }
+    }
+    location_json(inout o, r, s.span)
     o
 }
 
@@ -115,7 +125,7 @@ pub fn references(r: Res, p: t.Pos, include_decl: bool) -> List[u8] {
 
 // ---- hover
 
-pub fn hover(r: Res, p: t.Pos) -> List[u8] {
+pub fn hover(r: Res, p: t.Pos) -> List[u8] uses fs {
     let e = eider_pos(r, p)
     let l = t.pk_line(e)
     let c = t.pk_col(e)
@@ -157,6 +167,7 @@ pub fn hover(r: Res, p: t.Pos) -> List[u8] {
             }
             if !h.found && ty.len() == 0 {
                 builtin = builtin_doc(name)
+                if builtin.len() == 0 { builtin = namespace_doc(r, name) }
                 if builtin.len() > 0 { ty_span = wspan }
             }
         }
@@ -172,6 +183,11 @@ pub fn hover(r: Res, p: t.Pos) -> List[u8] {
         md = sys.lit("```eider\n")
         let mut d = s.detail.copy()
         if d.len() == 0 { d = s.name }
+        // a module (ide.ei's detail is its file's path): its dotted name, `module std.bytes`
+        if whole_module(s) && (s.span.file as usize) < r.an.files.len() {
+            d = sys.lit("module ")
+            bytes.append(inout d, analysis.module_label(r.an.files[s.span.file as usize]))
+        }
         // ide.ei's detail of a local is its type
         if s.kind == m.SK_LOCAL && !bytes.starts_with(d, s.name) && !bytes.starts_with(d, sys.lit("let")) && !bytes.starts_with(d, sys.lit("var")) && !bytes.starts_with(d, sys.lit("for")) {
             let mut x = s.name.copy()
@@ -254,6 +270,26 @@ fn builtin_doc(name: List[u8]) -> List[u8] {
     md
 }
 
+/// Hover text for a package namespace's alias (`std` of `import std`, which names no module
+/// and so has no reference; docs/compiler.md, "C8.26"), or empty.
+fn namespace_doc(r: Res, name: List[u8]) -> List[u8] {
+    if r.texts.len() == 0 { return List.new() }
+    for im in analysis.imports_in(r.texts[0]) {
+        if im.form != m.IM_NAMESPACE || !bytes.eq(im.alias, name) { continue }
+        let mut md = sys.lit("```eider\nimport ")
+        bytes.append(inout md, im.path)
+        if !bytes.eq(im.path, name) {
+            bytes.append(inout md, sys.lit(" as "))
+            bytes.append(inout md, name)
+        }
+        bytes.append(inout md, sys.lit("\n```\n\npackage namespace: `"))
+        bytes.append(inout md, name)
+        bytes.append(inout md, sys.lit(".<module>.<item>` names an item of one of its modules, which is loaded by its first use"))
+        return md
+    }
+    List.new()
+}
+
 fn base_name(path: List[u8]) -> List[u8] {
     match bytes.rfind_byte(path, 47) {
         Some(i) => bytes.slice(path, i + 1, path.len())
@@ -298,12 +334,14 @@ fn span_text(r: Res, s: m.Span) -> List[u8] {
     bytes.slice(r.texts[0], a, b)
 }
 
-/// The import aliases of the document (`g` in `import "geo.ei" as g`, `geo` without `as`)
+/// The import aliases of the document (`g` in `import "geo.ei" as g` or `import app.geo as g`,
+/// `geo` without `as`)
 /// with the file of their module: (name, file) from references to module symbols.
 type Alias = { name: List[u8], file: u32 }
 
 fn aliases(r: Res) -> List[Alias] {
     let mut out: List[Alias] = List.new()
+    let imps: List[m.Import] = if r.texts.len() > 0 { analysis.imports_in(r.texts[0]) } else { List.new() }
     for x in r.an.refs {
         if x.span.file != 0 || (x.target as usize) >= r.an.symbols.len() { continue }
         let s = r.an.symbols[x.target as usize]
@@ -314,6 +352,7 @@ fn aliases(r: Res) -> List[Alias] {
             // the import's path: its stem names the module unless an alias follows
             continue
         }
+        if !binds_alias(r, imps, x.span) { continue }
         let mut dup = false
         for a in out {
             if bytes.eq(a.name, w) { dup = true }
@@ -321,6 +360,20 @@ fn aliases(r: Res) -> List[Alias] {
         if !dup { out.push(Alias(w, s.span.file)) }
     }
     out
+}
+
+/// Whether a reference to a module at `sp` (file 0) is a name the module is bound to: an
+/// import's alias (or its last segment when it has none), or a use `alias.Name`; not the
+/// last segment of `import std.fs as files`, nor the module segment of a namespace use
+/// (`bytes` of `std.bytes.eq`, which binds no name `bytes`).
+fn binds_alias(r: Res, imps: List[m.Import], sp: m.Span) -> bool {
+    for im in imps {
+        if im.name.line == sp.line && im.name.col == sp.col { return im.form != m.IM_NAMESPACE }
+        if t.contains(im.stmt.line, im.stmt.col, im.stmt.end_line, im.stmt.end_col, sp.line, sp.col) { return false }
+    }
+    if r.texts.len() == 0 { return true }
+    let a = t.offset_of(r.texts[0], r.starts[0], sp.line, sp.col)
+    !(a > 0 && r.texts[0][a - 1] == 46)
 }
 
 pub fn document_symbols(r: Res) -> List[u8] {
@@ -404,23 +457,22 @@ pub fn folding(r: Res) -> List[u8] {
         rpc.kv_num(inout o, "endLine", (f.end_line - 1) as u64)
         o.push(125)
     }
-    // runs of two or more import lines
+    // runs of import statements on consecutive lines spanning two or more lines (a group
+    // across lines, `import std.{` ... `}`, is one statement)
     let mut run_start: u32 = 0
     let mut run_end: u32 = 0
     if r.texts.len() > 0 {
-        let text = r.texts[0]
-        let starts = r.starts[0]
-        let kw = sys.lit("import ")
-        for i in 0..starts.len() {
-            let a = starts[i] as usize
-            let line = (i + 1) as u32
-            if !bytes.starts_with(bytes.slice(text, a, a + kw.len()), kw) { continue }
-            if run_end > 0 && line == run_end + 1 {
-                run_end = line
+        let mut prev: u32 = 0
+        for im in analysis.imports_in(r.texts[0]) {
+            // a group's members share the statement
+            if im.stmt.line == prev { continue }
+            prev = im.stmt.line
+            if run_end > 0 && im.stmt.line == run_end + 1 {
+                run_end = im.stmt.end_line
             } else {
                 folding_imports(inout o, run_start, run_end)
-                run_start = line
-                run_end = line
+                run_start = im.stmt.line
+                run_end = im.stmt.end_line
             }
         }
     }
@@ -599,8 +651,9 @@ fn contains_name(xs: List[List[u8]], x: List[u8]) -> bool {
 }
 
 /// Completion at `p` in the document's current `text` (which may be newer than the
-/// analysis: the receiver before a `.` is looked up by name).
-pub fn completion(r: Res, text: List[u8], starts: List[u32], p: t.Pos) -> List[u8] {
+/// analysis: the receiver before a `.` is looked up by name). `path` is the document's
+/// file (module paths are completed from its package).
+pub fn completion(r: Res, path: List[u8], text: List[u8], starts: List[u32], p: t.Pos) -> List[u8] uses io, fs {
     let off = t.offset_of_pos(text, starts, p)
     // the identifier prefix being typed
     let mut a = off.copy()
@@ -608,12 +661,57 @@ pub fn completion(r: Res, text: List[u8], starts: List[u32], p: t.Pos) -> List[u
     let prefix = bytes.slice(text, a, off)
     let mut o = sys.lit("{\"isIncomplete\":false,\"items\":[")
     let mut seen: List[List[u8]] = List.new()
-    if a > 0 && text[a - 1] == 46 {
+    let pc = path_context(text, a)
+    if pc.found {
+        // a module path: after `import `, `import a.`, or in a group's `{ }`
+        if !pc.alias {
+            let names = if pc.segs.len() == 0 { analysis.import_heads(path) } else { analysis.modules_below(path, pc.segs) }
+            for x in names {
+                if bytes.starts_with(x.name, prefix) && !contains_name(seen, x.name) {
+                    seen.push(x.name)
+                    let kind: u64 = if x.kind == analysis.MN_DIR { 19 } else { 9 }
+                    item_json(inout o, x.name, kind, x.detail)
+                }
+            }
+        }
+    } else if a > 0 && text[a - 1] == 46 {
         // `recv.`: the receiver's name
         let mut b = a - 1
         while b > 0 && bytes.is_ident(text[b - 1]) { b -= 1 }
         let recv = bytes.slice(text, b, a - 1)
-        members(inout o, inout seen, r, recv, prefix, (t.pos_of_offset(text, starts, b)).line + 1)
+        // through a package namespace (docs/compiler.md, "C8.26"): `std.` its modules,
+        // `std.time.` the module's items
+        let mut ns: List[u8] = List.new()
+        let mut head: List[u8] = List.new()
+        let mut c = b.copy()
+        if b > 0 && text[b - 1] == 46 {
+            c = b - 1
+            while c > 0 && bytes.is_ident(text[c - 1]) { c -= 1 }
+            if !(c > 0 && text[c - 1] == 46) { head = namespace_of(text, bytes.slice(text, c, b - 1)) }
+        } else {
+            ns = namespace_of(text, recv)
+        }
+        if ns.len() > 0 {
+            let mut segs: List[List[u8]] = List.new()
+            segs.push(ns)
+            for x in analysis.modules_below(path, segs) {
+                if bytes.starts_with(x.name, prefix) && !contains_name(seen, x.name) {
+                    seen.push(x.name)
+                    let kind: u64 = if x.kind == analysis.MN_DIR { 19 } else { 9 }
+                    item_json(inout o, x.name, kind, x.detail)
+                }
+            }
+        } else if head.len() > 0 {
+            let mut mp = head.copy()
+            mp.push(47)
+            bytes.append(inout mp, recv)
+            let file = analysis.dotted_file(analysis.package_of(path), path, mp)
+            for i in 1..r.an.files.len() {
+                if bytes.eq(r.an.files[i], file) { module_items(inout o, inout seen, r, i as u32, prefix) }
+            }
+        } else {
+            members(inout o, inout seen, r, recv, prefix, (t.pos_of_offset(text, starts, b)).line + 1)
+        }
     } else {
         visible(inout o, inout seen, r, prefix, p.line + 1)
         for k in keywords() {
@@ -622,6 +720,98 @@ pub fn completion(r: Res, text: List[u8], starts: List[u32], p: t.Pos) -> List[u
     }
     bytes.append(inout o, sys.lit("]}"))
     o
+}
+
+/// Where a module path is typed (`found`): `segs` the segments before the one being typed,
+/// including a group's prefix (`import std.{bytes, f` -> [std]); `alias` when it is an
+/// `as` name instead (nothing to complete).
+type PathCtx = { found: bool, segs: List[List[u8]], alias: bool }
+
+/// Whether offset `a` (the start of the identifier being typed) is in a module path of an
+/// import: `import |`, `import a.b.|`, `import a.{x, b.|` (a group across lines too).
+fn path_context(text: List[u8], a: usize) -> PathCtx {
+    let none = PathCtx(false, List.new(), false)
+    // the segments typed before: `a.b.`
+    let sb = segments_before(text, a)
+    if !sb.found { return none }
+    let segs = sb.segs
+    // `import ` at the start of the line
+    let mut k = sb.at.copy()
+    while k > 0 && (text[k - 1] == 32 || text[k - 1] == 9) { k -= 1 }
+    if import_kw_before(text, k) { return PathCtx(true, segs, false) }
+    // an alias being typed: `import std.fs as |`, `fs as |` in a group
+    let alias = segs.len() == 0 && word_before(text, k, "as")
+    if alias {
+        k -= 2
+        let mut j = k.copy()
+        while j > 0 && text[j - 1] != 10 { j -= 1 }
+        let line = bytes.trim(bytes.slice(text, j, k))
+        if bytes.starts_with(line, sys.lit("import ")) && bytes.find_byte(line, 123, 0).is_none() { return PathCtx(true, segs, true) }
+    }
+    // in a group: back over members (`x, b.c as d,`) to an unclosed `{` after `import a.`
+    while k > 0 {
+        let ch = text[k - 1]
+        if ch == 123 { break }
+        if !(bytes.is_ident(ch) || ch == 46 || ch == 44 || bytes.is_space(ch)) { return none }
+        k -= 1
+    }
+    if k < 2 || text[k - 2] != 46 { return none }
+    // the group's prefix
+    let pb = segments_before(text, k - 1)
+    if !pb.found || pb.segs.len() == 0 { return none }
+    let mut e = pb.at.copy()
+    while e > 0 && (text[e - 1] == 32 || text[e - 1] == 9) { e -= 1 }
+    if !import_kw_before(text, e) { return none }
+    let mut pre = pb.segs.copy()
+    for x in segs { pre.push(x) }
+    PathCtx(true, pre, alias)
+}
+
+/// The segments `a.b.` before offset `at` (each an identifier followed by `.`), in order,
+/// and the offset where the first starts; not `found` when a `.` has no identifier before it.
+type Segs = { found: bool, segs: List[List[u8]], at: usize }
+
+fn segments_before(text: List[u8], at: usize) -> Segs {
+    let mut rev: List[List[u8]] = List.new()
+    let mut b = at.copy()
+    while b > 0 && text[b - 1] == 46 {
+        let mut c = b - 1
+        while c > 0 && bytes.is_ident(text[c - 1]) { c -= 1 }
+        if c == b - 1 { return Segs(false, List.new(), at) }
+        rev.push(bytes.slice(text, c, b - 1))
+        b = c
+    }
+    let mut segs: List[List[u8]] = List.new()
+    let mut i = rev.len()
+    while i > 0 {
+        i -= 1
+        segs.push(rev[i])
+    }
+    Segs(true, segs, b)
+}
+
+/// Whether the text before offset `k` is `import` at the start of a line (after indentation).
+fn import_kw_before(text: List[u8], k: usize) -> bool {
+    if !word_before(text, k, "import") { return false }
+    let mut j = k - 6
+    while j > 0 && (text[j - 1] == 32 || text[j - 1] == 9) { j -= 1 }
+    j == 0 || text[j - 1] == 10
+}
+
+/// Whether the word before offset `k` is `w` (a whole word).
+fn word_before(text: List[u8], k: usize, w: str) -> bool {
+    let ww = sys.lit(w)
+    if k < ww.len() || !bytes.eq(bytes.slice(text, k - ww.len(), k), ww) { return false }
+    let j = k - ww.len()
+    j == 0 || !bytes.is_ident(text[j - 1])
+}
+
+/// The package a namespace alias `name` stands for in `text` (`std` for `import std`), or empty.
+fn namespace_of(text: List[u8], name: List[u8]) -> List[u8] {
+    for im in analysis.imports_in(text) {
+        if im.form == m.IM_NAMESPACE && bytes.eq(im.alias, name) { return im.path }
+    }
+    List.new()
 }
 
 fn keywords() -> List[List[u8]] {
@@ -661,6 +851,17 @@ fn visible(inout o: List[u8], inout seen: List[List[u8]], r: Res, prefix: List[u
         if bytes.starts_with(a.name, prefix) && !contains_name(seen, a.name) {
             seen.push(a.name)
             item_json(inout o, a.name, 9, List.new())
+        }
+    }
+    // package namespaces (`std` of `import std`), which name no module
+    if r.texts.len() > 0 {
+        for im in analysis.imports_in(r.texts[0]) {
+            if im.form == m.IM_NAMESPACE && bytes.starts_with(im.alias, prefix) && !contains_name(seen, im.alias) {
+                seen.push(im.alias)
+                let mut d = sys.lit("import ")
+                bytes.append(inout d, im.path)
+                item_json(inout o, im.alias, 9, d)
+            }
         }
     }
     for s in r.an.symbols {
@@ -709,14 +910,7 @@ fn members(inout o: List[u8], inout seen: List[List[u8]], r: Res, recv: List[u8]
         }
     }
     if mf != 0 {
-        for x in r.an.symbols {
-            if x.span.file != mf { continue }
-            let item = x.kind == m.SK_TYPE || x.kind == m.SK_VARIANT || x.kind == m.SK_FN || x.kind == m.SK_CONST || x.kind == m.SK_TRAIT
-            if item && public(r, x) && bytes.starts_with(x.name, prefix) && !contains_name(seen, x.name) {
-                seen.push(x.name)
-                item_json(inout o, x.name, completion_kind(x.kind), x.detail)
-            }
-        }
+        module_items(inout o, inout seen, r, mf, prefix)
         return
     }
     // the receiver's type: a type name itself (`Point.`), else the type of the nearest
@@ -756,6 +950,18 @@ fn members(inout o: List[u8], inout seen: List[List[u8]], r: Res, recv: List[u8]
     }
 }
 
+/// The public items of the module in file `mf` that start with `prefix`.
+fn module_items(inout o: List[u8], inout seen: List[List[u8]], r: Res, mf: u32, prefix: List[u8]) {
+    for x in r.an.symbols {
+        if x.span.file != mf { continue }
+        let item = x.kind == m.SK_TYPE || x.kind == m.SK_VARIANT || x.kind == m.SK_FN || x.kind == m.SK_CONST || x.kind == m.SK_TRAIT
+        if item && public(r, x) && bytes.starts_with(x.name, prefix) && !contains_name(seen, x.name) {
+            seen.push(x.name)
+            item_json(inout o, x.name, completion_kind(x.kind), x.detail)
+        }
+    }
+}
+
 /// A module item usable from another module: declared `pub` (its detail is its source
 /// form), or a variant of a `pub` type.
 fn public(r: Res, x: m.Symbol) -> bool {
@@ -767,24 +973,48 @@ fn public(r: Res, x: m.Symbol) -> bool {
     false
 }
 
-/// The file an import's module symbol refers to: the analysis file whose stem is the alias
-/// is not reliable (aliases), so use the import's path from its detail.
+/// The file an import's module symbol (the lexical stand-in's) refers to: the analysis file
+/// whose stem is the alias is not reliable (aliases), so use the import's path from its
+/// detail, `import "path" [as alias]` or `import a.b.c [as alias]` (docs/compiler.md,
+/// "C8.26"), as `a/b/c`: the file whose path ends with the most of its components (the
+/// package's name is no directory of its own files; `x` and `x.ei` name the same file).
 fn module_file(r: Res, s: m.Symbol) -> u32 {
-    // detail is `import "path" [as alias]`; match the path's last component
     let d = s.detail
-    let mut a: usize = 0
-    while a < d.len() && d[a] != 34 { a += 1 }
-    let mut b = a + 1
-    while b < d.len() && d[b] != 34 { b += 1 }
-    if b >= d.len() { return 0 }
-    let mut path = bytes.slice(d, a + 1, b)
-    // `x` and `x.ei` name the same file
-    let base = base_name(path)
-    for i in 1..r.an.files.len() {
-        let f = base_name(r.an.files[i])
-        if bytes.eq(f, base) || (bytes.starts_with(f, base) && f.len() == base.len() + 3) { return i as u32 }
+    let mut path: List[u8] = List.new()
+    match bytes.find_byte(d, 34, 0) {
+        Some(a) => {
+            match bytes.find_byte(d, 34, a + 1) {
+                Some(b) => { path = bytes.slice(d, a + 1, b) }
+                None => { return 0 }
+            }
+        }
+        None => {
+            let kw = sys.lit("import ")
+            if !bytes.starts_with(d, kw) { return 0 }
+            let mut b = kw.len()
+            while b < d.len() && (bytes.is_ident(d[b]) || d[b] == 46) {
+                let ch: u8 = if d[b] == 46 { 47 } else { d[b] }
+                path.push(ch)
+                b += 1
+            }
+        }
     }
-    0
+    if path.len() == 0 { return 0 }
+    if !bytes.ends_with(path, sys.lit(".ei")) { bytes.append(inout path, sys.lit(".ei")) }
+    let parts = bytes.split(path, 47)
+    let mut best: u32 = 0
+    let mut best_n: usize = 0
+    for i in 1..r.an.files.len() {
+        let fp = bytes.split(r.an.files[i], 47)
+        // how many trailing components agree
+        let mut n: usize = 0
+        while n < parts.len() && n < fp.len() && bytes.eq(parts[parts.len() - 1 - n], fp[fp.len() - 1 - n]) { n += 1 }
+        if n > best_n {
+            best = i as u32
+            best_n = n
+        }
+    }
+    best
 }
 
 /// The declared type text of the nearest declaration or reference named `name` in this
