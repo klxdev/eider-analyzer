@@ -1,0 +1,29 @@
+{
+  "name": "eider",
+  "owner": {
+    "name": "Eider"
+  },
+  "description": "Eider language tooling for Claude Code",
+  "plugins": [
+    {
+      "name": "eider-lsp",
+      "description": "Eider language server (eider-analyzer): diagnostics, definition, references, hover for .ei files",
+      "version": "0.1.0",
+      "source": "./editors/claude-code",
+      "category": "development",
+      "strict": false,
+      "lspServers": {
+        "eider-analyzer": {
+          "command": "/var/home/klxdev/workplace/eider-analyzer/target/bin/eider-analyzer",
+          "args": [],
+          "env": {
+            "EIDER_ROOT": "/var/home/klxdev/workplace/eider-lang"
+          },
+          "extensionToLanguage": {
+            ".ei": "eider"
+          }
+        }
+      }
+    }
+  ]
+}
