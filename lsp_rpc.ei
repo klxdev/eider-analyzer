@@ -6,10 +6,10 @@
 // input costs one block, not the session. Output helpers build responses and notifications
 // as text (strings are quoted with json.quote, which keeps the output valid UTF-8).
 
-import "deps/core/sys.ei"
-import "deps/std/bytes.ei"
-import "deps/std/io.ei"
-import "deps/json/json.ei"
+import "core/sys"
+import "std/bytes"
+import "std/io"
+import "json"
 
 /// The largest body accepted (larger announcements are treated as malformed headers).
 pub const MAX_BODY: u64 = 268435456

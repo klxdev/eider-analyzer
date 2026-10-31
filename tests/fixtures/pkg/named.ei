@@ -1,0 +1,7 @@
+// a package import: the module by its package name (eider.toml: app)
+import "app/util" as u
+import "std/bytes"
+
+fn helper() -> i32 { u.one() }
+
+fn same(a: List[u8]) -> bool { bytes.eq(a, a) }

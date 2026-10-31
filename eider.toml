@@ -5,12 +5,12 @@ main = "lsp_main.ei"
 description = "eider-analyzer: a language server (LSP 3.17) for Eider, written in Eider"
 
 [deps.json]
-path = "/var/home/klxdev/workplace/eider-lang/packages/json"
+path = "../eider-lang/packages/json"
 # (`io` only for its tests: eider-pkg scans every .ei file of a package)
 uses = ["io"]
 
 # The compiler package (eider-lang/compiler): lexer, parser, checker, diagnostics. Only
 # lsp_analysis.ei imports it.
 [deps.eiderc]
-path = "/var/home/klxdev/workplace/eider-lang/compiler"
+path = "../eider-lang/compiler"
 uses = ["io", "fs", "net", "clock", "threads", "ffi"]

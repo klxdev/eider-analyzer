@@ -34,26 +34,31 @@ The workspace root of a file is the nearest directory with an `eider.toml`.
 Needs an [eider-lang](../eider-lang) checkout and a C11 compiler; nothing else.
 
 ```sh
-EIDER_LANG=/path/to/eider-lang sh scripts/build.sh   # fetches deps/ on first use
+EIDER_LANG=/path/to/eider-lang sh scripts/build.sh   # default: ../eider-lang
 ```
 
-This runs `eider-lang/scripts/eider-pkg -C . fetch` (the path dependencies in eider.toml:
-the compiler package `eiderc` and `json`), then `scripts/ei build lsp_main.ei -o
-target/bin/eider-analyzer`. Re-run `eider-pkg -C . fetch` after the compiler gains a file
-(deps/ links each file).
+The sources import their dependencies by package name (`import "eiderc/ide"`,
+`import "json"`, `import "std/fs"`), which the compiler resolves through `eider.lock`
+(eider-lang docs/compiler.md, "C8.3: packages and modules"); there is no `deps/` link farm.
+`scripts/build.sh` runs `eider-lang/scripts/eider-pkg -C . fetch` when `eider.lock` is
+missing, builds `target/eiderc` from eider-lang's `compiler/` (package imports need a
+compiler newer than its seed) and then `target/bin/eider-analyzer`.
 
 ### Dependencies
 
-`eider.toml` points at eider-lang's `compiler` (package `eiderc`) and `packages/json`; core
+`eider.toml` points at eider-lang's `compiler` (package `eiderc`) and `packages/json` as path
+dependencies, `../eider-lang/...` (an eider-lang checkout next to this repository); core
 and std (including `io.read`, which the server reads stdin with) come from the same
-eider-lang checkout's toolchain.
+eider-lang checkout's toolchain. A different checkout means a different `eider.toml` path
+and `eider-pkg -C . fetch`: the compiler and std must come from one checkout.
 
 ## Install
 
 The binary is `target/bin/eider-analyzer`. It needs the Eider toolchain at run time (the
 prelude, `core/prelude.ei`, and the C core for `comptime` constants): set `EIDER_ROOT` to
-the eider-lang checkout, or leave the binary where it is (`target/core` links the toolchain's
-`core/`, which the server finds above its own directory, as eiderc does).
+the eider-lang checkout, or leave the binary where it is (`target/core` and `target/std` link
+the toolchain's `core/` and `std/`, which the server finds above its own directory, as
+eiderc does).
 
 ```
 eider-analyzer [--sync] [--verbose]   serve on stdin/stdout (logs on stderr)

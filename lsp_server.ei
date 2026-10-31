@@ -7,11 +7,11 @@
 // a request needs the document's analysis. With `sync` (tests) a document is analysed right
 // after every open, change and save, so output order doesn't depend on timing.
 
-import "deps/core/sys.ei"
-import "deps/std/bytes.ei"
-import "deps/std/fs.ei"
-import "deps/std/io.ei"
-import "deps/json/json.ei"
+import "core/sys"
+import "std/bytes"
+import "std/fs"
+import "std/io"
+import "json"
 import "lsp_model.ei" as m
 import "lsp_text.ei" as t
 import "lsp_rpc.ei" as rpc

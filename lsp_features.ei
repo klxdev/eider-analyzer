@@ -2,9 +2,9 @@
 // it was computed from. Every function returns the JSON text of a `result`; none of them
 // can fail: a position nothing is at gives `null` or an empty list.
 
-import "deps/core/sys.ei"
-import "deps/std/bytes.ei"
-import "deps/json/json.ei"
+import "core/sys"
+import "std/bytes"
+import "json"
 import "lsp_model.ei" as m
 import "lsp_text.ei" as t
 import "lsp_rpc.ei" as rpc

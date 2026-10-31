@@ -1,5 +1,5 @@
 // lsp_analysis: the adapter between the server and the compiler. It is the only module that
-// imports the compiler package (deps/eiderc); everything else sees lsp_model.ei.
+// imports the compiler package (`import "eiderc/ide"`); everything else sees lsp_model.ei.
 //
 // `analyze` calls the compiler's IDE entry point, `ide.analyze` (compiler/ide.ei): the
 // passes of `eiderc check` with the program's symbols, references and types recorded. The
@@ -14,14 +14,14 @@
 // lsp_standin.ei, a lexical scan of the compiler's tokens, so completion, outline and
 // navigation keep working. (That scan was the stand-in used before ide.ei existed.)
 
-import "deps/core/sys.ei"
-import "deps/std/bytes.ei"
-import "deps/std/fs.ei"
-import "deps/eiderc/intern.ei"
-import "deps/eiderc/lex.ei"
-import "deps/eiderc/resolve.ei"
-import "deps/eiderc/diag.ei"
-import "deps/eiderc/ide.ei"
+import "core/sys"
+import "std/bytes"
+import "std/fs"
+import "eiderc/intern"
+import "eiderc/lex"
+import "eiderc/resolve"
+import "eiderc/diag"
+import "eiderc/ide"
 import "lsp_model.ei" as m
 import "lsp_standin.ei" as standin
 

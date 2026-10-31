@@ -17,9 +17,10 @@ root=$(pwd)
 if [ -z "$NOBUILD" ]; then
   sh scripts/build.sh >/dev/null || { echo "FAIL build"; exit 1; }
 fi
-toolchain=$(cd -P deps/core/.. && pwd)
+# the toolchain and the compiler scripts/build.sh made (package imports need it)
+toolchain=$(cd "${EIDER_LANG:-$root/../eider-lang}" && pwd -P)
 if [ -z "$NOBUILD" ] || [ ! -x target/bin/lsp-wire ]; then
-  "$toolchain/scripts/ei" build tests/lsp_wire.ei -o target/bin/lsp-wire >/dev/null || { echo "FAIL build lsp-wire"; exit 1; }
+  EIDER_ROOT=$toolchain target/eiderc build tests/lsp_wire.ei -o target/bin/lsp-wire >/dev/null || { echo "FAIL build lsp-wire"; exit 1; }
 fi
 server=$root/target/bin/eider-analyzer
 wire=$root/target/bin/lsp-wire

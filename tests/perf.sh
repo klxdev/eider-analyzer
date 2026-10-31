@@ -12,8 +12,9 @@ server=$root/target/bin/eider-analyzer
 wire=$root/target/bin/lsp-wire
 T=$root/target/tests
 mkdir -p "$T"
-src=$root/deps/eiderc
-[ -f "$src/check.ei" ] || { echo "skip perf: no deps/eiderc/check.ei (run scripts/build.sh)"; exit 0; }
+# the compiler's sources: the eiderc path dependency in eider.toml (the toolchain's compiler/)
+src=$(cd "${EIDER_LANG:-$root/../eider-lang}/compiler" 2>/dev/null && pwd -P)
+[ -f "$src/check.ei" ] || { echo "skip perf: no compiler/check.ei in the toolchain (set EIDER_LANG)"; exit 0; }
 lines=$(wc -l < "$src/check.ei")
 U='"textDocument":{"uri":"file://${ROOT}/check.ei"}'
 M='"textDocument":{"uri":"file://${ROOT}/main.ei"}'

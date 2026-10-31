@@ -16,10 +16,10 @@
 // URIs), lsp_model (the analysis data), lsp_analysis (the only module that touches the
 // compiler), lsp_standin (lexical symbols for buffers that do not parse).
 
-import "deps/core/sys.ei"
-import "deps/std/bytes.ei"
-import "deps/std/io.ei"
-import "deps/std/env.ei"
+import "core/sys"
+import "std/bytes"
+import "std/io"
+import "std/env"
 import "lsp_model.ei" as m
 import "lsp_rpc.ei" as rpc
 import "lsp_server.ei" as server
