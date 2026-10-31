@@ -11,7 +11,7 @@ the compiler's.
 |---|---|
 | `publishDiagnostics` | the compiler's diagnostic (code, message, `help:` line), for the open file and for an imported module the error is in; E0112 "no `main`" only for the package's main file (eider.toml `main`) |
 | `codeAction` (quickfix) | the compiler's machine-applicable fix as an edit |
-| `documentSymbol` | hierarchical: types with their fields/variants and methods, variants with their fields, functions, constants, traits, tests |
+| `documentSymbol` | hierarchical: types with their fields/variants and methods, variants with their fields, functions (with their loop labels, `outer: for`), constants, traits, tests |
 | `definition`, `references` | every name the checker resolved: locals, parameters, items, fields, methods, variants, module aliases, across modules |
 | `hover` | the symbol's signature or type, what it is and where, and the checker's type at the cursor; a type alias shows its target (`type Handler = fn(Request) -> Response`); prelude items the checker records no reference for (`From` in `impl From[E] for T`) and built-in types (`Ref`, `List`, `Map`, ...) get their declaration or a short description |
 | `foldingRange` | multi-line items (from their full spans) and runs of imports |
@@ -148,7 +148,8 @@ and quick fixes, navigation, symbols/folding/semantic tokens, completion, UTF-16
 non-ASCII text, packages, malformed input, the syntax since C8.2 (`fixtures/syntax.ei`:
 no diagnostics, aliases in the outline and hover, prelude and Ref hover and completion,
 navigation through `let mut` and `mut` patterns) and the new codes with their fixes
-(`fixtures/codes.ei`: E0002, E0307, E0306, E0308). `tests/debounce.sh` sends 40 changes in a burst
+(`fixtures/codes.ei`: E0002, E0307, E0306, E0308), and loop labels (`fixtures/labels.ei`:
+the outline, definition, references, hover). `tests/debounce.sh` sends 40 changes in a burst
 and checks they cost one analysis; `tests/clean.sh` opens every `.ei` file of eider-lang's
 `examples/` and `std/` and fails on any diagnostic (they build, so one would be the
 analyzer lagging the language); `tests/lexical.sh` compares the lexical stand-in's analysis

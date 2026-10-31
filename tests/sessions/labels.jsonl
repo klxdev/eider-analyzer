@@ -1,0 +1,18 @@
+# loop labels in tests/fixtures/labels.ei (eider-lang's ide.ei SK_LABEL): the outline lists
+# them under their function; definition and references go from `break rows` to the label of
+# the nearest enclosing loop, and a second loop with the same label is a symbol of its own;
+# hover shows the label's loop
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/labels.ei 1
+{"jsonrpc":"2.0","id":2,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/labels.ei"}}}
+# definition: `break rows` (line 11), `continue rows` (line 14), `break rows` of the second loop (line 18)
+{"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/labels.ei"},"position":{"line":10,"character":23}}}
+{"jsonrpc":"2.0","id":4,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/labels.ei"},"position":{"line":13,"character":33}}}
+{"jsonrpc":"2.0","id":5,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/labels.ei"},"position":{"line":17,"character":27}}}
+# references of the first `rows` (from its label) and of `cols` (from `continue cols`), with the declaration
+{"jsonrpc":"2.0","id":6,"method":"textDocument/references","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/labels.ei"},"position":{"line":4,"character":5},"context":{"includeDeclaration":true}}}
+{"jsonrpc":"2.0","id":7,"method":"textDocument/references","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/labels.ei"},"position":{"line":12,"character":34},"context":{"includeDeclaration":true}}}
+{"jsonrpc":"2.0","id":8,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/labels.ei"},"position":{"line":10,"character":23}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

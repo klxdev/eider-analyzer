@@ -277,6 +277,8 @@ fn symbol_kind(k: u32, variants: bool) -> u64 {
     if k == m.SK_CONST { return 14 }
     if k == m.SK_TRAIT { return 11 }
     if k == m.SK_TEST { return 24 }
+    // LSP has no label kind: Key, a name that stands for a place in the code
+    if k == m.SK_LABEL { return 20 }
     13
 }
 

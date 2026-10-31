@@ -1,0 +1,27 @@
+// Loop labels (tests/sessions/labels.jsonl): outline entries under their function, and
+// `break`/`continue` referring to the nearest enclosing loop with the label.
+fn find(xs: List[i64], want: i64) -> bool {
+    let mut found = false
+    rows: for x in xs {
+        let mut i: i64 = 0
+        cols: while i < 3 {
+            i += 1
+            if x == want {
+                found = true
+                break rows
+            }
+            if i == 2 { continue cols }
+            if x < 0 { continue rows }
+        }
+    }
+    rows: for k in 0..2 {
+        if k == 1 { break rows }
+    }
+    found
+}
+
+fn main() {
+    let mut xs: List[i64] = List.new()
+    xs.push(1)
+    let f = find(xs, 1)
+}

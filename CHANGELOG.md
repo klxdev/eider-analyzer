@@ -4,6 +4,12 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
+## Unreleased
+
+- Loop labels (`outer: for ...`, eider-lang `SK_LABEL`) in the outline under their function
+  (LSP kind Key, detail `outer: for`), with definition, references and hover from `break
+  outer` / `continue outer` (tests/sessions/labels.jsonl).
+
 ## 0.1.0
 
 The first release, with Eider 0.1.0.
