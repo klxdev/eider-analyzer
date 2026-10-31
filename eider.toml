@@ -4,11 +4,8 @@ version = "0.1.0"
 main = "lsp_main.ei"
 description = "eider-analyzer: a language server (LSP 3.17) for Eider, written in Eider"
 
-# Until packages/json is merged into eider-lang main, this points at the eider-lang worktree
-# branch that adds it (README.md, "Dependencies"). After the merge:
-#   path = "/var/home/klxdev/workplace/eider-lang/packages/json"
 [deps.json]
-path = "/var/home/klxdev/workplace/eider-lang/.claude/worktrees/agent-a9f5c4fe287b97adc/packages/json"
+path = "/var/home/klxdev/workplace/eider-lang/packages/json"
 # (`io` only for its tests: eider-pkg scans every .ei file of a package)
 uses = ["io"]
 

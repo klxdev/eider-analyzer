@@ -44,12 +44,9 @@ target/bin/eider-analyzer`. Re-run `eider-pkg -C . fetch` after the compiler gai
 
 ### Dependencies
 
-`eider.toml` points at `eider-lang/compiler` and at `packages/json`. Until the branch that
-adds `packages/json` (and `io.read`, which the server reads stdin with) is merged into
-eider-lang main, the json path is the eider-lang worktree
-`.claude/worktrees/agent-a9f5c4fe287b97adc` (branch `worktree-agent-a9f5c4fe287b97adc`), and
-deps/core and deps/std must come from that toolchain, so run that checkout's
-`scripts/eider-pkg`. After the merge, change the path to `eider-lang/packages/json`.
+`eider.toml` points at eider-lang's `compiler` (package `eiderc`) and `packages/json`; core
+and std (including `io.read`, which the server reads stdin with) come from the same
+eider-lang checkout's toolchain.
 
 ## Install
 

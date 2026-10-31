@@ -11,6 +11,6 @@ grants = ["io", "fs", "net", "clock", "threads", "ffi"]
 [[package]]
 name = "json"
 version = "0.1.0"
-source = "path+../eider-lang/.claude/worktrees/agent-a9f5c4fe287b97adc/packages/json"
+source = "path+../eider-lang/packages/json"
 deps = []
 grants = ["io"]
