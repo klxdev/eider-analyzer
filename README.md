@@ -60,6 +60,20 @@ and std (including `io.read`, which the server reads stdin with) come from the s
 eider-lang checkout's toolchain. A different checkout means a different `eider.toml` path
 and `eider-pkg -C . fetch`: the compiler and std must come from one checkout.
 
+### Version
+
+`VERSION` holds eider-analyzer's version, MAJOR.MINOR.PATCH (`CHANGELOG.md`);
+`eider-analyzer --version` prints it with the toolchain it was built with
+(`eider-analyzer 0.1.0 (eider 0.1.0)`), and the LSP `initialize` reply's `serverInfo` has it.
+eider-analyzer ships with the Eider toolchain: its MAJOR.MINOR is always the toolchain's,
+its PATCH its own, for fixes between toolchain releases. `scripts/build.sh` stops (exit 2)
+when the eider-lang checkout's `VERSION` has another MAJOR.MINOR, or none; `eider.toml`'s
+`eider = "0.1"` makes the compiler say the same (E0811). `lsp_version.ei`, `eider.toml` and
+`.claude-plugin/marketplace.json` carry the version too: `scripts/version.sh check` says
+whether they agree with `VERSION` (eider-lang's `scripts/check-tools.sh` runs it),
+`scripts/version.sh sync` writes `VERSION` into them. Releases are cut from eider-lang
+(`scripts/version.sh bump`, `scripts/release.sh`; its `docs/site/tooling/releases.md`).
+
 ## Install
 
 The binary is `target/bin/eider-analyzer`. It needs the Eider toolchain at run time (the

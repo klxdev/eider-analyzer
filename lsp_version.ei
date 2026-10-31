@@ -1,0 +1,9 @@
+// lsp_version: eider-analyzer's version, the Eider copy of VERSION (CHANGELOG.md).
+//
+// eider-analyzer ships with the Eider toolchain: its MAJOR.MINOR is always the toolchain's
+// (eider-lang's VERSION), its PATCH its own. scripts/version.sh check holds this constant,
+// eider.toml, .claude-plugin/marketplace.json and VERSION equal; scripts/version.sh sync
+// writes VERSION into the others (eider-lang's scripts/version.sh bump runs it).
+
+/// eider-analyzer's version, MAJOR.MINOR.PATCH.
+pub const VERSION: str = "0.1.0"

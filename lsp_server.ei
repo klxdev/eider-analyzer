@@ -17,6 +17,7 @@ import "lsp_text.ei" as t
 import "lsp_rpc.ei" as rpc
 import "lsp_features.ei" as feat
 import "lsp_analysis.ei" as analysis
+import "lsp_version.ei" as ver
 
 pub type Doc = { uri: List[u8], path: List[u8], version: i64, text: List[u8], starts: List[u32], dirty: bool, root: List[u8] }
 
@@ -528,6 +529,8 @@ fn capabilities() -> List[u8] {
     bytes.append(inout o, sys.lit("\"semanticTokensProvider\":{\"legend\":"))
     bytes.append(inout o, feat.legend())
     bytes.append(inout o, sys.lit(",\"full\":true}"))
-    bytes.append(inout o, sys.lit("},\"serverInfo\":{\"name\":\"eider-analyzer\",\"version\":\"0.1.0\"}}"))
+    bytes.append(inout o, sys.lit("},\"serverInfo\":{\"name\":\"eider-analyzer\",\"version\":\""))
+    bytes.append(inout o, sys.lit(ver.VERSION))
+    bytes.append(inout o, sys.lit("\"}}"))
     o
 }

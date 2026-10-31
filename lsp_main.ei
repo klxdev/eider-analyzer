@@ -18,6 +18,7 @@
 // compiler), lsp_standin (lexical symbols for buffers that do not parse).
 
 import "core/sys"
+import "core/version" as toolchain
 import "std/bytes"
 import "std/io"
 import "std/env"
@@ -25,6 +26,7 @@ import "lsp_model.ei" as m
 import "lsp_rpc.ei" as rpc
 import "lsp_server.ei" as server
 import "lsp_analysis.ei" as analysis
+import "lsp_version.ei" as ver
 
 fn is(a: List[u8], s: str) -> bool { bytes.eq(a, sys.lit(s)) }
 
@@ -72,10 +74,23 @@ fn reader(c: Chan[List[u8]], pending: Mutex[i64]) -> i32 uses io {
     0
 }
 
+/// `eider-analyzer --version`: `eider-analyzer <VERSION> (eider <toolchain VERSION>)`, the
+/// toolchain being the one whose compiler it was built with.
+fn version_line() -> List[u8] {
+    let mut l = sys.lit("eider-analyzer ")
+    bytes.append(inout l, sys.lit(ver.VERSION))
+    bytes.append(inout l, sys.lit(" (eider "))
+    bytes.append(inout l, sys.lit(toolchain.VERSION))
+    l.push(41)
+    l
+}
+
 fn usage() -> List[u8] {
-    let mut t: List[u8] = List.new()
+    let mut t = sys.lit("eider-analyzer ")
+    bytes.append(inout t, sys.lit(ver.VERSION))
+    bytes.append(inout t, sys.lit(": a language server for Eider (LSP 3.17 over stdio)"))
+    t.push(10)
     for l in [
-        "eider-analyzer 0.1.0: a language server for Eider (LSP 3.17 over stdio)",
         "",
         "usage:",
         "  eider-analyzer [--sync] [--verbose]   serve on stdin/stdout; logs go to stderr",
@@ -110,7 +125,7 @@ fn main() uses io, fs, net, clock, threads {
         } else if is(a, "--stdio") {
             // what some clients pass; stdio is the only transport
         } else if is(a, "--version") {
-            io.outln(sys.lit("eider-analyzer 0.1.0"))
+            io.outln(version_line())
             env.exit(0)
         } else if is(a, "--help") || is(a, "-h") {
             io.out(usage())
