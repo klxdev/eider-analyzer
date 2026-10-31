@@ -1,0 +1,5 @@
+// a module with a type error (used by tests/sessions/diagnostics.jsonl)
+
+pub fn value() -> i32 {
+    true
+}

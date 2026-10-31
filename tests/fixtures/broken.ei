@@ -1,0 +1,7 @@
+fn shout(n: i32) {
+    print(n)
+}
+
+fn main() uses io {
+    shout(1)
+}

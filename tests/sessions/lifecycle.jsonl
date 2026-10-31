@@ -1,0 +1,18 @@
+# the lifecycle: requests before initialize, initialize twice, unknown methods, shutdown, exit
+{"jsonrpc":"2.0","id":1,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///x.ei"},"position":{"line":0,"character":0}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///x.ei","languageId":"eider","version":1,"text":"fn main() {}"}}}
+{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","workspaceFolders":[{"uri":"file://${ROOT}/fixtures","name":"fixtures"}],"capabilities":{"general":{"positionEncodings":["utf-16"]}}}}
+{"jsonrpc":"2.0","id":"init-again","method":"initialize","params":{}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+{"jsonrpc":"2.0","id":3,"method":"workspace/symbol","params":{"query":""}}
+{"jsonrpc":"2.0","id":4,"method":"textDocument/rename","params":{}}
+{"jsonrpc":"2.0","method":"$/setTrace","params":{"value":"off"}}
+{"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":3}}
+# a document that isn't open: empty answers
+{"jsonrpc":"2.0","id":5,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"file:///not/open.ei"}}}
+{"jsonrpc":"2.0","id":6,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///not/open.ei"},"position":{"line":0,"character":0}}}
+{"jsonrpc":"2.0","id":7,"method":"shutdown"}
+{"jsonrpc":"2.0","id":8,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///x.ei"},"position":{"line":0,"character":0}}}
+{"jsonrpc":"2.0","method":"exit"}
+# nothing after exit is read
+{"jsonrpc":"2.0","id":9,"method":"shutdown"}

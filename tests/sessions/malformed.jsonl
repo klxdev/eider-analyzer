@@ -1,0 +1,38 @@
+# malformed input never stops the server: each bad message gets an error (or a log line) and
+# the next good one is answered
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"capabilities":{}}}
+# not JSON, truncated JSON, a trailing comma, a bare string, an array (batches aren't LSP)
+!body this is not json
+!body {"jsonrpc":"2.0","id":2,"method":
+!body {"jsonrpc":"2.0","id":3,"method":"shutdown",}
+!body "just a string"
+!body [{"jsonrpc":"2.0","id":4,"method":"shutdown"}]
+# invalid UTF-8 inside a string
+!raw Content-Length: 55\r\n\r\n{"jsonrpc":"2.0","id":5,"method":"textDocument/hover\xff"}
+# a header block without Content-Length, one with a bad value, then a good message
+!raw Content-Type: application/vscode-jsonrpc\r\n\r\n
+!raw Content-Length: twelve\r\n\r\n
+{"jsonrpc":"2.0","id":6,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///nowhere.ei"},"position":{"line":0,"character":0}}}
+# a lowercase header name and an extra header are fine
+!raw content-length: 45\r\nContent-Type: application/vscode-jsonrpc; charset=utf-8\r\n\r\n{"jsonrpc":"2.0","id":7,"method":"unknown/x"}
+# wrong types: method a number, id an object (treated as a notification), params not objects
+{"jsonrpc":"2.0","id":8,"method":42}
+{"jsonrpc":"2.0","id":{"a":1},"method":"textDocument/hover"}
+{"jsonrpc":"2.0","id":9,"method":"textDocument/hover"}
+{"jsonrpc":"2.0","id":10,"method":"textDocument/hover","params":[1,2,3]}
+{"jsonrpc":"2.0","id":11,"method":"textDocument/hover","params":{"textDocument":{"uri":17},"position":"here"}}
+# notifications with missing or wrong fields are ignored
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///a.ei"}}}
+{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file:///never-opened.ei","version":2},"contentChanges":[{"text":"x"}]}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///tmp/eider-analyzer-test/odd.ei","version":1,"text":"fn main() {}\n"}}}
+# positions out of range: negative, huge, past the last line; a change with a reversed range
+{"jsonrpc":"2.0","id":12,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///tmp/eider-analyzer-test/odd.ei"},"position":{"line":-5,"character":-1}}}
+{"jsonrpc":"2.0","id":13,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///tmp/eider-analyzer-test/odd.ei"},"position":{"line":99999999999999999999,"character":1e400}}}
+{"jsonrpc":"2.0","id":14,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///tmp/eider-analyzer-test/odd.ei"},"position":{"line":50,"character":3}}}
+{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file:///tmp/eider-analyzer-test/odd.ei","version":2},"contentChanges":[{"range":{"start":{"line":0,"character":9},"end":{"line":0,"character":2}},"text":" uses io"}]}}
+{"jsonrpc":"2.0","id":15,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"file:///tmp/eider-analyzer-test/odd.ei"}}}
+# a response from the client (we never send requests) is ignored
+{"jsonrpc":"2.0","id":77,"result":null}
+# still alive
+{"jsonrpc":"2.0","id":16,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

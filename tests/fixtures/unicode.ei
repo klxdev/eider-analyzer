@@ -1,0 +1,7 @@
+// Ünïcödé: “quotes”, emoji 😀 and CJK 漢字 before code on the same lines.
+fn main() uses io {
+    let s = "😀漢"; let count = 2
+    let t = "é😀😀"; let total = count + 1
+    print(total)
+    let bad = "😀"; let flag: bool = 5
+}

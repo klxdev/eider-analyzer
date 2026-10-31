@@ -1,0 +1,11 @@
+eider-analyzer: parse error: invalid literal (expected true, false or null) at line 1, column 2 (byte 1)
+eider-analyzer: parse error: unexpected end of input, expected a value at line 1, column 34 (byte 33)
+eider-analyzer: parse error: trailing comma in an object at line 1, column 45 (byte 44)
+eider-analyzer: invalid request: not an object
+eider-analyzer: invalid request: not an object
+eider-analyzer: parse error: invalid UTF-8 in a string at line 1, column 53 (byte 52)
+eider-analyzer: dropped malformed input: a header block without a valid Content-Length: Content-Type: application/vscode-jsonrpc
+eider-analyzer: dropped malformed input: a header block without a valid Content-Length: Content-Length: twelve
+eider-analyzer: invalid request: `method` is not a string
+eider-analyzer: didOpen without a uri or text: ignored
+eider-analyzer: didChange for a document that isn't open: ignored

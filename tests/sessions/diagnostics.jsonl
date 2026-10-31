@@ -1,0 +1,26 @@
+# diagnostics with the compiler's help and fix, the fix as a quick fix, edits, save, close
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/broken.ei 1
+# the quick fix for E0201 (line 1 is where the fix applies, line 2 where the error is)
+{"jsonrpc":"2.0","id":2,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/broken.ei"},"range":{"start":{"line":1,"character":4},"end":{"line":1,"character":4}},"context":{"diagnostics":[]}}}
+# no fix away from it
+{"jsonrpc":"2.0","id":3,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/broken.ei"},"range":{"start":{"line":5,"character":0},"end":{"line":5,"character":0}},"context":{"diagnostics":[]}}}
+# apply it by hand: the diagnostics clear
+{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/broken.ei","version":2},"contentChanges":[{"text":"fn shout(n: i32) uses io {\n    print(n)\n}\n\nfn main() uses io {\n    shout(1)\n}\n"}]}}
+# a lexer error, then a parse error, then an unknown name (E0102-style), each one at a time
+{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/broken.ei","version":3},"contentChanges":[{"text":"fn main() uses io {\n    let s = \"unterminated\n}\n"}]}}
+{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/broken.ei","version":4},"contentChanges":[{"text":"fn main() uses io {\n    let = 5\n}\n"}]}}
+{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/broken.ei","version":5},"contentChanges":[{"text":"fn main() uses io {\n    print(nothing)\n}\n"}]}}
+# the compiler's help goes into the message
+{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/broken.ei","version":6},"contentChanges":[{"text":"fn main() uses io {\n    let xs = List.new()\n}\n"}]}}
+# a ranged (incremental) change is applied too: replace `List.new()` with `[1, 2]`
+{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/broken.ei","version":7},"contentChanges":[{"range":{"start":{"line":1,"character":13},"end":{"line":1,"character":23}},"text":"[1, 2]"}]}}
+# an error in an imported module is published for that module's file
+{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/broken.ei","version":8},"contentChanges":[{"text":"import \"bad_module.ei\" as b\n\nfn main() uses io {\n    print(b.value())\n}\n"}]}}
+{"jsonrpc":"2.0","method":"textDocument/didSave","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/broken.ei"}}}
+# fixed again: both files' diagnostics clear
+{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/broken.ei","version":9},"contentChanges":[{"text":"fn main() uses io {\n    print(1)\n}\n"}]}}
+{"jsonrpc":"2.0","method":"textDocument/didClose","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/broken.ei"}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

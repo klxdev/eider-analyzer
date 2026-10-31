@@ -1,0 +1,19 @@
+# UTF-16 positions with non-ASCII text before code on the same line (tests/fixtures/unicode.ei):
+# 😀 is one Eider column but two UTF-16 units; é, 漢 and the quotes are one of each
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/unicode.ei 1
+# `count` on line 3 (after é😀😀) -> its declaration on line 2 (after 😀漢)
+{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/unicode.ei"},"position":{"line":3,"character":34}}}
+{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/unicode.ei"},"position":{"line":3,"character":26}}}
+{"jsonrpc":"2.0","id":4,"method":"textDocument/references","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/unicode.ei"},"position":{"line":4,"character":12},"context":{"includeDeclaration":true}}}
+# the middle of a surrogate pair is the start of the emoji: nothing there
+{"jsonrpc":"2.0","id":5,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/unicode.ei"},"position":{"line":3,"character":15}}}
+# a position past the end of the line is its end
+{"jsonrpc":"2.0","id":6,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/unicode.ei"},"position":{"line":4,"character":400}}}
+# completing `co` after the emoji
+{"jsonrpc":"2.0","id":7,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/unicode.ei"},"position":{"line":3,"character":35}}}
+{"jsonrpc":"2.0","id":8,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/unicode.ei"}}}
+{"jsonrpc":"2.0","id":9,"method":"textDocument/foldingRange","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/unicode.ei"}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}
