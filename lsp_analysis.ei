@@ -8,11 +8,11 @@
 // paths without resolving them), a container of index+1 (0: top level) becomes an index or
 // NONE, and diag.Diag becomes m.Diag (code, message and help as bytes).
 //
-// When the entry file doesn't lex or parse (the usual state of a buffer mid-edit),
-// ide.analyze has no symbols to give. Then the symbols, references and declared types come
-// from lsp_standin.ei, a lexical scan of the compiler's tokens, so completion, outline and
-// navigation keep working while the user types. (That scan was the stand-in used before
-// ide.ei existed.)
+// The compiler recovers from syntax errors (the usual state of a buffer mid-edit): ide.analyze
+// then still gives every diagnostic, and the symbols, references and types of what parsed.
+// Only when it has no symbols at all despite a lex or parse error do they come from
+// lsp_standin.ei, a lexical scan of the compiler's tokens, so completion, outline and
+// navigation keep working. (That scan was the stand-in used before ide.ei existed.)
 
 import "deps/core/sys.ei"
 import "deps/std/bytes.ei"
