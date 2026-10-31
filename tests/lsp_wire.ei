@@ -21,8 +21,8 @@ import "json"
 import "../lsp_rpc.ei" as rpc
 
 fn subst(s: List[u8], from: List[u8], to: List[u8]) -> List[u8] {
-    var out: List[u8] = List.new()
-    var i: usize = 0
+    let mut out: List[u8] = List.new()
+    let mut i: usize = 0
     while i < s.len() {
         if from.len() > 0 && bytes.starts_with(bytes.slice(s, i, i + from.len()), from) {
             bytes.append(inout out, to)
@@ -36,7 +36,7 @@ fn subst(s: List[u8], from: List[u8], to: List[u8]) -> List[u8] {
 }
 
 fn words(l: List[u8]) -> List[List[u8]] {
-    var out: List[List[u8]] = List.new()
+    let mut out: List[List[u8]] = List.new()
     for w in bytes.split(l, 32) {
         if w.len() > 0 { out.push(w) }
     }
@@ -47,7 +47,7 @@ fn read_or_die(path: List[u8]) -> List[u8] uses io, fs {
     match fs.read(path) {
         Ok(t) => t
         Err(_) => {
-            var m = sys.lit("lsp-wire: cannot read ")
+            let mut m = sys.lit("lsp-wire: cannot read ")
             bytes.append(inout m, path)
             io.errln(m)
             env.exit(2)
@@ -57,7 +57,7 @@ fn read_or_die(path: List[u8]) -> List[u8] uses io, fs {
 }
 
 fn uri(root: List[u8], p: List[u8]) -> List[u8] {
-    var u = sys.lit("file://")
+    let mut u = sys.lit("file://")
     bytes.append(inout u, root)
     u.push(47)
     bytes.append(inout u, p)
@@ -73,8 +73,8 @@ fn hexval(c: u8) -> i32 {
 
 /// `\r`, `\n` and `\xHH` as bytes.
 fn unescape(s: List[u8]) -> List[u8] {
-    var out: List[u8] = List.new()
-    var i: usize = 0
+    let mut out: List[u8] = List.new()
+    let mut i: usize = 0
     while i < s.len() {
         if s[i] == 92 && i + 1 < s.len() && s[i + 1] == 114 {
             out.push(13)
@@ -99,9 +99,9 @@ fn frame(root: List[u8]) uses io, fs {
         Err(_) => List.new()
     }
     let var_root = sys.lit("${ROOT}")
-    var out: List[u8] = List.new()
+    let mut out: List[u8] = List.new()
     for line in bytes.split(input, 10) {
-        var l = line
+        let mut l = line.copy()
         if l.len() > 0 && l[l.len() - 1] == 13 { l = bytes.slice(l, 0, l.len() - 1) }
         if l.len() == 0 || l[0] == 35 { continue }
         if bytes.starts_with(l, sys.lit("!raw ")) {
@@ -116,11 +116,11 @@ fn frame(root: List[u8]) uses io, fs {
             let w = words(l)
             let open = bytes.eq(w[0], sys.lit("!open"))
             let file = if open { w[1] } else { w[3] }
-            var src_path = root
+            let mut src_path = root.copy()
             src_path.push(47)
             bytes.append(inout src_path, file)
             let text = read_or_die(src_path)
-            var b: List[u8] = List.new()
+            let mut b: List[u8] = List.new()
             if open {
                 b = sys.lit("{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":")
                 json.quote_into(inout b, uri(root, w[1]))
@@ -151,10 +151,10 @@ fn deframe(root: List[u8]) uses io {
         Ok(t) => t
         Err(_) => List.new()
     }
-    var f = rpc.framer()
+    let mut f = rpc.framer()
     rpc.feed(inout f, input)
-    var out: List[u8] = List.new()
-    var going = true
+    let mut out: List[u8] = List.new()
+    let mut going = true
     while going {
         match rpc.next(inout f) {
             rpc.Body(b) => {

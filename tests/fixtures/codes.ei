@@ -1,0 +1,16 @@
+fn f(x: u32) -> bool {
+    x & 1 == 0
+}
+
+fn main() uses io {
+    let xs = [1, 2]
+    let mut a = xs
+    let mut ys: List[i32] = List.new()
+    ys.push(1)
+    let o = ys[0]
+    ys.push(2)
+    print(o)
+    for i in 0..2 {
+        break outer
+    }
+}

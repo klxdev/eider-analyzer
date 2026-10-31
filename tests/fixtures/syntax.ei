@@ -1,0 +1,100 @@
+// The syntax of eider-lang docs/compiler.md C8.2 to C8.25, all of it valid: the server must
+// give no diagnostics here, and its outline, hover and completion must know the forms.
+import "std/fs"
+
+type Handler = fn(inout i32, i32) -> bool
+type Pairs[K, V] = List[(K, V)]
+
+type Counter = { n: i32, step: Handler, log: Ref[List[i32]] }
+
+type Size = | Small | Large
+
+impl Default for Size {
+    fn default() -> Size { Small }
+}
+
+type AppError = | Parse(i32) | Other
+
+impl From[i32] for AppError {
+    fn from(value: i32) -> AppError { Parse(value) }
+}
+
+fn parse(n: i32) -> Result[i32, i32] {
+    if n < 0 { return Err(n) }
+    Ok(n)
+}
+
+fn run(n: i32) -> Result[(), AppError] {
+    let v = parse(n)?
+    if v == 0 { return Err(Other) }
+    Ok(())
+}
+
+fn bump(inout x: i32, by: i32) -> bool {
+    x += by
+    (x & 1) == 0
+}
+
+fn bits(x: u32) -> u32 {
+    let mut y = ~x & 255
+    y |= 1 << 3
+    y ^= x >> 2
+    y <<= 1
+    y >>= 1
+    y &= 127
+    y
+}
+
+fn main() uses io {
+    let mut total = 0
+    let mut pairs: Pairs[str, i32] = List.new()
+    pairs.push(("a", 1))
+    for (k, v) in pairs {
+        print(k)
+        total += v
+    }
+    let mut m: Map[String, i32] = Map.new()
+    m.insert("x".to_string(), 2)
+    for (k, v) in m {
+        print(k)
+        total += v
+    }
+    let (mut a, b) = (1, 2)
+    a += b
+    let mut stack: List[i32] = List.new()
+    stack.push(1)
+    while let Some(top) = stack.pop() {
+        total += top
+    }
+    rows: for i in 0..3 {
+        cols: for j in 0..3 {
+            if j == 2 { continue rows }
+            if i == 2 { break rows }
+            if j > i { break cols }
+        }
+    }
+    let r = Ref.new(5)
+    r.update(|inout n: i32| { n += 1 })
+    let c = Counter(0, |inout x: i32, by: i32| { x += by
+        true }, Ref.new(List.new()))
+    let mut seen = 0
+    if c.step(inout seen, 2) { total += 1 }
+    if bump(inout seen, 1) { total += 1 }
+    let words = "a\tb\x41\u{e9}" "c"
+    let s = String.default()
+        .to_string()
+    let size: Size = Size.default()
+    let o = 1.compare(2)
+    match o {
+        Less => print("less")
+        Equal | Greater => {}
+    }
+    match run(1) {
+        Ok(()) => {}
+        Err(_) => {}
+    }
+    let mut taken: Option[i32] = Some(4)
+    let old = taken.take().unwrap_or(0)
+    print(total + a + bits(3) as i32 + old + r.get() + words.len() as i32 + s.len() as i32)
+    print(size)
+}

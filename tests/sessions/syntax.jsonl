@@ -1,0 +1,38 @@
+# the syntax of eider-lang docs/compiler.md C8.2 to C8.25 (fixtures/syntax.ei): no diagnostics,
+# the outline with type aliases, hover and completion that know aliases, Ref, Default, From,
+# Ordering and the prelude traits, navigation through `let mut`, `mut` patterns, `for (k, v)`,
+# `while let`, labeled loops and closures with `inout` parameters
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/syntax.ei 1
+{"jsonrpc":"2.0","id":2,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"}}}
+# hover: a type alias shows its target; a field of an alias type; Ref[T]; the prelude's
+# Default, From, Ordering and Less; `let mut`, `mut a`, `for (k, v)` and `while let` bindings
+{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":4,"character":6}}}
+{"jsonrpc":"2.0","id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":7,"character":27}}}
+{"jsonrpc":"2.0","id":5,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":75,"character":8}}}
+{"jsonrpc":"2.0","id":6,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":75,"character":13}}}
+{"jsonrpc":"2.0","id":7,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":11,"character":7}}}
+{"jsonrpc":"2.0","id":8,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":17,"character":7}}}
+{"jsonrpc":"2.0","id":9,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":86,"character":8}}}
+{"jsonrpc":"2.0","id":10,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":88,"character":9}}}
+{"jsonrpc":"2.0","id":11,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":48,"character":14}}}
+{"jsonrpc":"2.0","id":12,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":61,"character":13}}}
+{"jsonrpc":"2.0","id":13,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":57,"character":9}}}
+{"jsonrpc":"2.0","id":14,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":65,"character":19}}}
+{"jsonrpc":"2.0","id":15,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":76,"character":20}}}
+# a label is not a name: no hover
+{"jsonrpc":"2.0","id":16,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":68,"character":6}}}
+# definition and references through `let mut` and a `mut` pattern binding
+{"jsonrpc":"2.0","id":17,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":62,"character":4}}}
+{"jsonrpc":"2.0","id":18,"method":"textDocument/references","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":48,"character":14},"context":{"includeDeclaration":true}}}
+{"jsonrpc":"2.0","id":19,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":66,"character":18}}}
+# completion of the prelude's names and of Ref's methods, typed into the buffer
+{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei","version":2},"contentChanges":[{"range":{"start":{"line":98,"character":15},"end":{"line":98,"character":15}},"text":"\n    Or\n    De\n    Gr\n    r.\n    Size."}]}}
+{"jsonrpc":"2.0","id":20,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":99,"character":6}}}
+{"jsonrpc":"2.0","id":21,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":100,"character":6}}}
+{"jsonrpc":"2.0","id":22,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":101,"character":6}}}
+{"jsonrpc":"2.0","id":23,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":102,"character":6}}}
+{"jsonrpc":"2.0","id":24,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/syntax.ei"},"position":{"line":103,"character":9}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

@@ -2,6 +2,7 @@
 //
 //   eider-analyzer [--sync] [--verbose]   serve LSP on stdin/stdout (logs go to stderr)
 //   eider-analyzer --dump <file.ei>       print the analysis of a file (for debugging)
+//   eider-analyzer --dump-lexical <file.ei>   the same from the lexical stand-in alone
 //   eider-analyzer --version | --help
 //
 // Two threads: a reader turns stdin into message bodies (lsp_rpc.ei's framing) and sends
@@ -31,8 +32,8 @@ fn is(a: List[u8], s: str) -> bool { bytes.eq(a, sys.lit(s)) }
 /// yet taken. Malformed input is sent as a NUL byte and the log line (a body can't start
 /// with NUL: it would not be JSON either way). Closes `c` at end of input.
 fn reader(c: Chan[List[u8]], pending: Mutex[i64]) -> i32 uses io {
-    var f = rpc.framer()
-    var going = true
+    let mut f = rpc.framer()
+    let mut going = true
     while going {
         let chunk: List[u8] = match io.read(1048576) {
             Ok(b) => b
@@ -46,7 +47,7 @@ fn reader(c: Chan[List[u8]], pending: Mutex[i64]) -> i32 uses io {
             going = false
         } else {
             rpc.feed(inout f, chunk)
-            var more = true
+            let mut more = true
             while more {
                 match rpc.next(inout f) {
                     rpc.Body(b) => {
@@ -55,7 +56,7 @@ fn reader(c: Chan[List[u8]], pending: Mutex[i64]) -> i32 uses io {
                     }
                     rpc.Dropped(why) => {
                         // reported by the main thread, so the log keeps the input's order
-                        var l: List[u8] = List.new()
+                        let mut l: List[u8] = List.new()
                         l.push(0)
                         bytes.append(inout l, sys.lit("dropped malformed input: "))
                         bytes.append(inout l, why)
@@ -72,13 +73,14 @@ fn reader(c: Chan[List[u8]], pending: Mutex[i64]) -> i32 uses io {
 }
 
 fn usage() -> List[u8] {
-    var t: List[u8] = List.new()
+    let mut t: List[u8] = List.new()
     for l in [
         "eider-analyzer 0.1.0: a language server for Eider (LSP 3.17 over stdio)",
         "",
         "usage:",
         "  eider-analyzer [--sync] [--verbose]   serve on stdin/stdout; logs go to stderr",
         "  eider-analyzer --dump <file.ei>       print the analysis of a file",
+        "  eider-analyzer --dump-lexical <file.ei>   the same from the lexical stand-in alone",
         "  eider-analyzer --version | --help",
         "",
         "  --sync      analyse after every change (no debounce; deterministic output order)",
@@ -96,9 +98,9 @@ fn usage() -> List[u8] {
 
 fn main() uses io, fs, net, clock, threads {
     let argv = env.args()
-    var sync = false
-    var verbose = false
-    var i: usize = 1
+    let mut sync = false
+    let mut verbose = false
+    let mut i: usize = 1
     while i < argv.len() {
         let a = argv[i]
         if is(a, "--sync") {
@@ -114,10 +116,13 @@ fn main() uses io, fs, net, clock, threads {
             io.out(usage())
             env.exit(0)
         } else if is(a, "--dump") && i + 1 < argv.len() {
-            dump(argv[i + 1])
+            dump(argv[i + 1], false)
+            env.exit(0)
+        } else if is(a, "--dump-lexical") && i + 1 < argv.len() {
+            dump(argv[i + 1], true)
             env.exit(0)
         } else {
-            var l = sys.lit("unknown argument ")
+            let mut l = sys.lit("unknown argument ")
             bytes.append(inout l, a)
             rpc.log(l)
             io.err(usage())
@@ -127,7 +132,7 @@ fn main() uses io, fs, net, clock, threads {
     }
     let prelude = analysis.prelude_path()
     if prelude.len() > 0 {
-        var l = sys.lit("warning: the Eider prelude is missing at ")
+        let mut l = sys.lit("warning: the Eider prelude is missing at ")
         bytes.append(inout l, prelude)
         bytes.append(inout l, sys.lit("; set EIDER_ROOT to the eider-lang checkout (diagnostics will say E0804)"))
         rpc.log(l)
@@ -137,8 +142,8 @@ fn main() uses io, fs, net, clock, threads {
     let cc = c
     let pp = pending
     let task = spawn(|| -> i32 reader(cc, pp))
-    var s = server.new_state(sync, verbose)
-    var going = true
+    let mut s = server.new_state(sync, verbose)
+    let mut going = true
     while going {
         match c.recv() {
             Some(body) => {
@@ -176,10 +181,10 @@ fn sp(inout o: List[u8], s: m.Span) {
     num(inout o, s.end_col)
 }
 
-fn dump(path: List[u8]) uses io, fs, net, clock {
+fn dump(path: List[u8], lexical: bool) uses io, fs, net, clock {
     let none: List[List[u8]] = List.new()
-    let a = analysis.analyze(analysis.absolute(path), none, none)
-    var o: List[u8] = List.new()
+    let a = if lexical { analysis.analyze_lexical(analysis.absolute(path)) } else { analysis.analyze(analysis.absolute(path), none, none) }
+    let mut o: List[u8] = List.new()
     for f in a.files {
         bytes.append(inout o, sys.lit("file "))
         bytes.append(inout o, f)

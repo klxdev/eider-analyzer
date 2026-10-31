@@ -10,8 +10,9 @@
 # messages doesn't depend on timing) with the framed script on stdin (tests/lsp_wire.ei
 # frames it). stdout is deframed to one message per line and compared with <name>.out;
 # stderr (the server's log) with <name>.err when that file exists; the exit code with the
-# `# exit N` line of the script (default 0). tests/debounce.sh and tests/perf.sh are run
-# after the sessions.
+# `# exit N` line of the script (default 0). tests/debounce.sh, tests/clean.sh (no
+# diagnostics on eider-lang's examples/ and std/), tests/lexical.sh (the lexical stand-in) and
+# tests/perf.sh are run after the sessions.
 cd "$(dirname "$0")/.." || exit 1
 root=$(pwd)
 if [ -z "$NOBUILD" ]; then
@@ -49,6 +50,8 @@ for s in tests/sessions/*.jsonl; do
   if [ $ok = 1 ]; then echo "ok   $name ($(wc -l < "$T/$name.got") messages)"; else fail=1; fi
 done
 sh tests/debounce.sh || fail=1
+sh tests/clean.sh || fail=1
+sh tests/lexical.sh || fail=1
 sh tests/perf.sh || fail=1
 [ $fail = 0 ] && echo "ALL PASSED"
 exit $fail

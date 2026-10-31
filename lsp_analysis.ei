@@ -24,22 +24,24 @@ import "eiderc/diag"
 import "eiderc/ide"
 import "lsp_model.ei" as m
 import "lsp_standin.ei" as standin
+import "lsp_text.ei" as txt
 
 /// Analyse the program whose entry file is `entry` (an absolute path). `overlay_texts[i]` is
 /// the text to use for `overlay_paths[i]` instead of what is on disk (unsaved buffers).
 pub fn analyze(entry: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) -> m.Analysis uses io, fs, net, clock {
     let path = norm(entry)
     let x = ide.analyze(path, overlay_paths, overlay_texts)
-    var a = m.empty()
+    let mut a = m.empty()
     a.files.push(path)
     for f in x.files { let ignored = file_id(inout a, norm(f)) }
-    var last: u32 = 0
+    let mut last: u32 = 0
     for s in x.symbols {
         let sp = span_of(inout a, inout last, s.span)
         let full = span_of(inout a, inout last, s.full)
         let c = if s.container == 0 { m.NONE } else { s.container - 1 }
         a.symbols.push(m.Symbol(s.name, s.kind, sp, full, c, s.detail))
     }
+    alias_details(inout a, overlay_paths, overlay_texts)
     for r in x.refs {
         let sp = span_of(inout a, inout last, r.span)
         a.refs.push(m.Ref(sp, r.target))
@@ -48,7 +50,7 @@ pub fn analyze(entry: List[u8], overlay_paths: List[List[u8]], overlay_texts: Li
         let sp = span_of(inout a, inout last, t.span)
         a.types.push(m.TypeAt(sp, t.text))
     }
-    var lexing = false
+    let mut lexing = false
     for d in x.diags {
         if bytes.eq(sys.lit(d.code), sys.lit("E0001")) { lexing = true }
         let md = diag_of(inout a, d)
@@ -59,6 +61,78 @@ pub fn analyze(entry: List[u8], overlay_paths: List[List[u8]], overlay_texts: Li
             Some(src) => lexical(inout a, path, src, overlay_paths, overlay_texts)
             None => {}
         }
+    }
+    a
+}
+
+/// ide.ei's detail of a type is its head (`type Handler`, `pub type Pairs[K, V]`); for a type
+/// alias (docs/compiler.md, "C8.18") the target is what a reader wants, so its detail becomes
+/// the whole declaration on one line (`type Handler = fn(Request) -> Response`), read from the
+/// source when it is at most 120 bytes.
+fn alias_details(inout a: m.Analysis, overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) uses fs {
+    let mut texts: Map[u32, List[u8]] = Map.new()
+    let mut lines: Map[u32, List[u32]] = Map.new()
+    for i in 0..a.symbols.len() {
+        let x = a.symbols[i].copy()
+        if x.kind != m.SK_TYPE || bytes.find(x.detail, sys.lit("="), 0).is_some() { continue }
+        if (x.full.file as usize) >= a.files.len() { continue }
+        if !texts.contains(x.full.file) {
+            let src: List[u8] = match text_of(a.files[x.full.file as usize], overlay_paths, overlay_texts) {
+                Some(src) => src
+                None => List.new()
+            }
+            lines.insert(x.full.file, txt.line_starts(src))
+            texts.insert(x.full.file, src)
+        }
+        let empty: List[u8] = List.new()
+        let src = texts.get(x.full.file).unwrap_or(empty)
+        if src.len() == 0 { continue }
+        let none: List[u32] = List.new()
+        let starts = lines.get(x.full.file).unwrap_or(none)
+        let from = txt.offset_of(src, starts, x.full.line, x.full.col)
+        let to = txt.offset_of(src, starts, x.full.end_line, x.full.end_col)
+        if to <= from || to - from > 120 { continue }
+        let decl = flat(bytes.slice(src, from, to))
+        // after `=`: an alias unless a record (`{`) or variants (`|`) follow
+        match bytes.find(decl, sys.lit(" = "), 0) {
+            Some(k) => {
+                if k + 3 < decl.len() && decl[k + 3] != 123 && decl[k + 3] != 124 {
+                    let mut y = x.copy()
+                    y.detail = decl
+                    a.symbols[i] = y
+                }
+            }
+            None => {}
+        }
+    }
+}
+
+/// Every run of whitespace made one space.
+fn flat(raw: List[u8]) -> List[u8] {
+    let mut out: List[u8] = List.new()
+    let mut space = false
+    for c in raw {
+        if c == 10 || c == 13 || c == 9 || c == 32 {
+            space = true
+        } else {
+            if space && out.len() > 0 { out.push(32) }
+            space = false
+            out.push(c)
+        }
+    }
+    out
+}
+
+/// The lexical stand-in's analysis of `entry` alone (what `analyze` falls back to when the
+/// compiler has no symbols), for `eider-analyzer --dump-lexical` and its tests.
+pub fn analyze_lexical(entry: List[u8]) -> m.Analysis uses io, fs {
+    let path = norm(entry)
+    let mut a = m.empty()
+    a.files.push(path)
+    let none: List[List[u8]] = List.new()
+    match text_of(path, none, none) {
+        Some(src) => lexical(inout a, path, src, none, none)
+        None => {}
     }
     a
 }
@@ -80,7 +154,7 @@ fn same_path(normalised: List[u8], raw: List[u8]) -> bool {
 
 /// The prelude's path when it is missing (the toolchain can't be found), else empty.
 pub fn prelude_path() -> List[u8] uses io, fs {
-    var p = resolve.toolchain_root()
+    let mut p = resolve.toolchain_root()
     p.push(47)
     bytes.append(inout p, sys.lit("core/prelude.ei"))
     if fs.exists(p) { return List.new() }
@@ -98,7 +172,7 @@ pub fn absolute(path: List[u8]) -> List[u8] uses fs {
 /// A compiler diagnostic as the model's (`file` indexes `a.files`, added if new). Module
 /// prefixes in messages are spelled `module.Name`, as eiderc prints them.
 pub fn diag_of(inout a: m.Analysis, d: diag.Diag) -> m.Diag {
-    var file: u32 = 0
+    let mut file: u32 = 0
     if d.file.len() > 0 { file = file_id(inout a, norm(d.file)) }
     let fix: Option[m.Fix] = match d.fix {
         Some(f) => Some(m.Fix(f.line, f.col, f.delete, f.insert))
@@ -128,7 +202,7 @@ fn text_of(path: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[Li
 /// `/a/./b/../c` -> `/a/c` (lexically; the compiler joins import paths without resolving).
 pub fn norm(path: List[u8]) -> List[u8] {
     let abs = path.len() > 0 && path[0] == 47
-    var parts: List[List[u8]] = List.new()
+    let mut parts: List[List[u8]] = List.new()
     for p in bytes.split(path, 47) {
         if p.len() == 0 || bytes.eq(p, sys.lit(".")) { continue }
         if bytes.eq(p, sys.lit("..")) && parts.len() > 0 && !bytes.eq(parts[parts.len() - 1], sys.lit("..")) {
@@ -138,7 +212,7 @@ pub fn norm(path: List[u8]) -> List[u8] {
         if bytes.eq(p, sys.lit("..")) && abs { continue }
         parts.push(p)
     }
-    var out: List[u8] = List.new()
+    let mut out: List[u8] = List.new()
     if abs { out.push(47) }
     bytes.append(inout out, bytes.join(parts, sys.lit("/")))
     out
@@ -153,11 +227,11 @@ fn lex_file(id: u32, src: List[u8], inout names: intern.Interner) -> Option[stan
         lex.Done(l) => l
         _ => { return None }
     }
-    var toks: List[standin.Tok] = List.new()
+    let mut toks: List[standin.Tok] = List.new()
     for t in lx.toks {
-        var kind = standin.TK_PUNCT
-        var sym: u32 = 0
-        var p: u32 = 0
+        let mut kind = standin.TK_PUNCT
+        let mut sym: u32 = 0
+        let mut p: u32 = 0
         match t.kind {
             lex.Ident => {
                 kind = standin.TK_IDENT
@@ -186,9 +260,9 @@ fn lex_file(id: u32, src: List[u8], inout names: intern.Interner) -> Option[stan
 type Imp = { path: List[u8], alias: u32 }
 
 fn imports_of(f: standin.File, inout names: intern.Interner) -> List[Imp] {
-    var out: List[Imp] = List.new()
-    var i: usize = 0
-    var depth: i32 = 0
+    let mut out: List[Imp] = List.new()
+    let mut i: usize = 0
+    let mut depth: i32 = 0
     while i + 1 < f.toks.len() {
         let t = f.toks[i]
         if t.kind == standin.TK_PUNCT && t.p == 123 { depth += 1 }
@@ -196,7 +270,7 @@ fn imports_of(f: standin.File, inout names: intern.Interner) -> List[Imp] {
         // `import` is keyword 23
         if depth == 0 && t.kind == standin.TK_IDENT && t.sym == 23 && f.toks[i + 1].kind == standin.TK_STR {
             let path = f.strs[f.toks[i + 1].sym as usize]
-            var alias: u32 = 0
+            let mut alias: u32 = 0
             if i + 3 < f.toks.len() && f.toks[i + 2].kind == standin.TK_IDENT && f.toks[i + 2].sym == 17 && f.toks[i + 3].kind == standin.TK_IDENT {
                 alias = f.toks[i + 3].sym
             } else {
@@ -210,13 +284,18 @@ fn imports_of(f: standin.File, inout names: intern.Interner) -> List[Imp] {
     out
 }
 
+/// A package import (`"json"`, `"std/fs"`): no `.` and not absolute (docs/compiler.md, "C8.3").
+fn package_import(path: List[u8]) -> bool {
+    !(path.len() > 0 && path[0] == 47) && bytes.find(path, sys.lit("."), 0).is_none()
+}
+
 /// Whether the last path component has an extension.
 fn has_ext(path: List[u8]) -> bool {
     let start: usize = match bytes.rfind_byte(path, 47) {
         Some(k) => k + 1
         None => 0
     }
-    var i = start + 1
+    let mut i = start + 1
     while i < path.len() {
         if path[i] == 46 { return true }
         i += 1
@@ -232,20 +311,28 @@ fn dir_of(path: List[u8]) -> List[u8] {
     }
 }
 
-fn lexical(inout a: m.Analysis, path: List[u8], src: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) uses fs {
-    var names = intern.new()
+fn lexical(inout a: m.Analysis, path: List[u8], src: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) uses io, fs {
+    let mut names = intern.new()
     let entry = match lex_file(0, src, inout names) {
         Some(f) => f
         None => { return }
     }
-    var out = standin.new_out()
-    var mods: List[standin.ModFile] = List.new()
+    let mut out = standin.new_out()
+    let mut mods: List[standin.ModFile] = List.new()
     let none: List[standin.ModFile] = List.new()
     let dir = dir_of(path)
     for imp in imports_of(entry, inout names) {
-        var p = imp.path
-        if !(p.len() > 0 && p[0] == 47) {
-            var j = dir
+        let mut p = imp.path.copy()
+        if package_import(p) {
+            // `"std/fs"`, `"core/sys"`: the toolchain's (docs/compiler.md, "C8.3"); other
+            // packages need eider.lock, which this scan doesn't read
+            if !(bytes.starts_with(p, sys.lit("std/")) || bytes.starts_with(p, sys.lit("core/"))) { continue }
+            let mut j = resolve.toolchain_root()
+            j.push(47)
+            bytes.append(inout j, p)
+            p = j
+        } else if !(p.len() > 0 && p[0] == 47) {
+            let mut j = dir.copy()
             j.push(47)
             bytes.append(inout j, p)
             p = j
@@ -267,8 +354,8 @@ fn lexical(inout a: m.Analysis, path: List[u8], src: List[u8], overlay_paths: Li
     }
     let ignored2 = standin.scan(entry, names.names, true, inout out, mods)
     // keep the entry file's symbols and the public ones of imported files
-    var map: List[u32] = List.new()
-    var n: u32 = 0
+    let mut map: List[u32] = List.new()
+    let mut n: u32 = 0
     for i in 0..out.symbols.len() {
         if out.symbols[i].span.file == 0 || out.public[i] {
             map.push(n)
@@ -279,7 +366,7 @@ fn lexical(inout a: m.Analysis, path: List[u8], src: List[u8], overlay_paths: Li
     }
     for i in 0..out.symbols.len() {
         if map[i] == m.NONE { continue }
-        var s = out.symbols[i]
+        let mut s = out.symbols[i].copy()
         if s.container != m.NONE { s.container = map[s.container as usize] }
         a.symbols.push(s)
     }

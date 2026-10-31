@@ -16,7 +16,7 @@ pub type Pos = { line: u32, ch: u32 }
 
 /// Byte offsets of the start of every line (line 0 starts at 0).
 pub fn line_starts(text: List[u8]) -> List[u32] {
-    var out: List[u32] = List.new()
+    let mut out: List[u32] = List.new()
     out.push(0)
     for i in 0..text.len() {
         if text[i] == 10 { out.push((i + 1) as u32) }
@@ -44,9 +44,9 @@ pub fn offset_of(text: List[u8], starts: List[u32], line: u32, col: u32) -> usiz
     if line == 0 { return 0 }
     let l = (line - 1) as usize
     if l >= starts.len() { return text.len() }
-    var i = starts[l] as usize
+    let mut i = starts[l] as usize
     let end = line_end(text, starts, l)
-    var c: u32 = 1
+    let mut c: u32 = 1
     while i < end {
         let b = text[i]
         if b < 128 || b >= 192 {
@@ -61,15 +61,15 @@ pub fn offset_of(text: List[u8], starts: List[u32], line: u32, col: u32) -> usiz
 /// A byte offset to an LSP position.
 pub fn pos_of_offset(text: List[u8], starts: List[u32], off: usize) -> Pos {
     // binary search for the line
-    var lo: usize = 0
-    var hi = starts.len()
+    let mut lo: usize = 0
+    let mut hi = starts.len()
     while hi - lo > 1 {
         let mid = (lo + hi) / 2
         if (starts[mid] as usize) <= off { lo = mid } else { hi = mid }
     }
-    var i = starts[lo] as usize
+    let mut i = starts[lo] as usize
     let stop = if off < text.len() { off } else { text.len() }
-    var ch: u32 = 0
+    let mut ch: u32 = 0
     while i < stop {
         ch += units(text[i])
         i += 1
@@ -86,9 +86,9 @@ pub fn to_lsp(text: List[u8], starts: List[u32], line: u32, col: u32) -> Pos {
         return pos_of_offset(text, starts, text.len())
     }
     let end = line_end(text, starts, l)
-    var i = starts[l] as usize
-    var c: u32 = 1
-    var ch: u32 = 0
+    let mut i = starts[l] as usize
+    let mut c: u32 = 1
+    let mut ch: u32 = 0
     while i < end && c < col {
         let b = text[i]
         ch += units(b)
@@ -106,8 +106,8 @@ pub fn offset_of_pos(text: List[u8], starts: List[u32], p: Pos) -> usize {
     let l = p.line as usize
     if l >= starts.len() { return text.len() }
     let end = line_end(text, starts, l)
-    var i = starts[l] as usize
-    var ch: u32 = 0
+    let mut i = starts[l] as usize
+    let mut ch: u32 = 0
     while i < end {
         let u = units(text[i])
         if u > 0 {
@@ -131,8 +131,8 @@ pub fn from_lsp(text: List[u8], starts: List[u32], p: Pos) -> u64 {
 }
 
 fn col_at(text: List[u8], start: usize, off: usize) -> u32 {
-    var c: u32 = 1
-    var i = start
+    let mut c: u32 = 1
+    let mut i = start.copy()
     while i < off && i < text.len() {
         let b = text[i]
         if b < 128 || b >= 192 { c += 1 }
@@ -157,8 +157,8 @@ pub fn contains(l1: u32, c1: u32, l2: u32, c2: u32, l: u32, c: u32) -> bool {
 
 /// The UTF-16 length of text[a..b].
 pub fn units_between(text: List[u8], a: usize, b: usize) -> u32 {
-    var n: u32 = 0
-    var i = a
+    let mut n: u32 = 0
+    let mut i = a.copy()
     while i < b && i < text.len() {
         n += units(text[i])
         i += 1
@@ -172,9 +172,9 @@ pub fn ident_byte(b: u8) -> bool { bytes.is_ident(b) || b >= 128 }
 
 /// The identifier around byte offset `off` (start, end); start == end when there is none.
 pub fn word_at(text: List[u8], off: usize) -> u64 {
-    var a = off
+    let mut a = off.copy()
     while a > 0 && bytes.is_ident(text[a - 1]) { a -= 1 }
-    var b = off
+    let mut b = off.copy()
     while b < text.len() && bytes.is_ident(text[b]) { b += 1 }
     (a as u64) * 4294967296 + (b as u64)
 }
@@ -193,10 +193,10 @@ fn hexval(c: u8) -> i32 {
 pub fn uri_to_path(uri: List[u8]) -> List[u8] {
     let pre = sys.lit("file://")
     if !bytes.starts_with(uri, pre) { return uri }
-    var i = pre.len()
+    let mut i = pre.len()
     // skip an authority (`file://localhost/x`)
     while i < uri.len() && uri[i] != 47 { i += 1 }
-    var out: List[u8] = List.new()
+    let mut out: List[u8] = List.new()
     while i < uri.len() {
         let c = uri[i]
         if c == 37 && i + 2 < uri.len() && hexval(uri[i + 1]) >= 0 && hexval(uri[i + 2]) >= 0 {
@@ -221,7 +221,7 @@ fn hex_digit(n: u8) -> u8 {
 /// `/a/b c.ei` -> `file:///a/b%20c.ei` (everything but unreserved characters and `/`
 /// percent-encoded, as VS Code and Neovim spell them).
 pub fn path_to_uri(path: List[u8]) -> List[u8] {
-    var out = sys.lit("file://")
+    let mut out = sys.lit("file://")
     for c in path {
         if bytes.is_ident(c) || c == 47 || c == 45 || c == 46 || c == 126 {
             out.push(c)

@@ -93,9 +93,9 @@ fn find_doc(s: S, uri: List[u8]) -> u32 {
 /// The nearest directory at or above `dir` holding an eider.toml (the package root), else
 /// the workspace root that contains the file, else the file's directory.
 fn package_root(s: S, path: List[u8]) -> List[u8] uses fs {
-    var dir = t.dir_of(path)
+    let mut dir = t.dir_of(path)
     while dir.len() > 0 {
-        var toml = dir
+        let mut toml = dir.copy()
         if !bytes.ends_with(toml, sys.lit("/")) { toml.push(47) }
         bytes.append(inout toml, sys.lit("eider.toml"))
         if fs.exists(toml) { return dir }
@@ -110,7 +110,7 @@ fn package_root(s: S, path: List[u8]) -> List[u8] uses fs {
 
 /// The path of the package's main file (`main = "..."` in `root`/eider.toml), or empty.
 fn package_main(root: List[u8]) -> List[u8] uses fs {
-    var toml = root
+    let mut toml = root.copy()
     toml.push(47)
     bytes.append(inout toml, sys.lit("eider.toml"))
     let text: List[u8] = match fs.read(toml) {
@@ -128,7 +128,7 @@ fn package_main(root: List[u8]) -> List[u8] uses fs {
             Some(e) => bytes.slice(v, 1, e)
             None => { continue }
         }
-        var p = root
+        let mut p = root.copy()
         p.push(47)
         bytes.append(inout p, name)
         return analysis.norm(p)
@@ -145,7 +145,7 @@ fn open_doc(inout s: S, uri: List[u8], version: i64, text: List[u8]) uses io, fs
         s.docs.push(doc)
         s.slots.push(Slot(false, empty_res(), List.new()))
         if s.verbose {
-            var l = sys.lit("opened ")
+            let mut l = sys.lit("opened ")
             bytes.append(inout l, path)
             bytes.append(inout l, sys.lit(" (package root "))
             bytes.append(inout l, root)
@@ -161,19 +161,19 @@ fn empty_res() -> feat.Res { feat.Res(m.empty(), List.new(), List.new(), List.ne
 
 /// Analyse document i now and publish its diagnostics.
 pub fn analyze_doc(inout s: S, i: u32) uses io, fs, net, clock {
-    let doc = s.docs[i as usize]
-    var paths: List[List[u8]] = List.new()
-    var texts: List[List[u8]] = List.new()
+    let doc = s.docs[i as usize].copy()
+    let mut paths: List[List[u8]] = List.new()
+    let mut texts: List[List[u8]] = List.new()
     for d in s.docs {
         paths.push(d.path)
         texts.push(d.text)
     }
     let t0 = now_ms()
-    var an = analysis.analyze(doc.path, paths, texts)
+    let mut an = analysis.analyze(doc.path, paths, texts)
     // a file is checked as a program, so a module without `main` ends with E0112; that is
     // only an error in the package's main file (eider.toml `main`)
     if !bytes.eq(doc.path, package_main(doc.root)) {
-        var kept: List[m.Diag] = List.new()
+        let mut kept: List[m.Diag] = List.new()
         for x in an.diags {
             let no_main = is(x.code, "E0112") && x.line == 1 && x.col == 1 && is(x.msg, "no `main` function")
             if !no_main { kept.push(x) }
@@ -182,14 +182,14 @@ pub fn analyze_doc(inout s: S, i: u32) uses io, fs, net, clock {
     }
     s.analyses += 1
     // the texts the analysis saw, for position conversion
-    var ftexts: List[List[u8]] = List.new()
-    var fstarts: List[List[u32]] = List.new()
+    let mut ftexts: List[List[u8]] = List.new()
+    let mut fstarts: List[List[u32]] = List.new()
     for k in 0..an.files.len() {
-        var tx: List[u8] = List.new()
+        let mut tx: List[u8] = List.new()
         if k == 0 {
             tx = doc.text
         } else {
-            var found = false
+            let mut found = false
             for d in s.docs {
                 if bytes.eq(d.path, an.files[k]) {
                     tx = d.text
@@ -207,14 +207,14 @@ pub fn analyze_doc(inout s: S, i: u32) uses io, fs, net, clock {
         ftexts.push(tx)
     }
     let res = feat.Res(an, ftexts, fstarts, doc.uri, doc.version)
-    var d2 = doc
+    let mut d2 = doc.copy()
     d2.dirty = false
     s.docs[i as usize] = d2
     let old = s.slots[i as usize].published
     let published = publish(res, old)
     s.slots[i as usize] = Slot(true, res, published)
     if s.verbose {
-        var l = sys.lit("analysed ")
+        let mut l = sys.lit("analysed ")
         bytes.append(inout l, doc.path)
         bytes.append(inout l, sys.lit(" in "))
         bytes.append(inout l, bytes.from_u64(now_ms() - t0))
@@ -226,17 +226,17 @@ pub fn analyze_doc(inout s: S, i: u32) uses io, fs, net, clock {
 /// Publish the diagnostics of `res` per file, and empty lists for files that had some
 /// before but have none now. Returns the URIs published with diagnostics.
 fn publish(res: feat.Res, old: List[List[u8]]) -> List[List[u8]] uses io {
-    var now: List[List[u8]] = List.new()
+    let mut now: List[List[u8]] = List.new()
     // the document itself always gets a (possibly empty) list
-    var files = feat.diag_files(res)
-    var has0 = false
+    let mut files = feat.diag_files(res)
+    let mut has0 = false
     for f in files {
         if f == 0 { has0 = true }
     }
     if !has0 { files.push(0) }
     for f in files {
         let uri = feat.uri_of(res, f)
-        var p = sys.lit("{\"uri\":")
+        let mut p = sys.lit("{\"uri\":")
         json.quote_into(inout p, uri)
         if f == 0 {
             bytes.append(inout p, sys.lit(",\"version\":"))
@@ -249,12 +249,12 @@ fn publish(res: feat.Res, old: List[List[u8]]) -> List[List[u8]] uses io {
         if f != 0 { now.push(uri) }
     }
     for u in old {
-        var still = false
+        let mut still = false
         for x in now {
             if bytes.eq(x, u) { still = true }
         }
         if !still {
-            var p = sys.lit("{\"uri\":")
+            let mut p = sys.lit("{\"uri\":")
             json.quote_into(inout p, u)
             bytes.append(inout p, sys.lit(",\"diagnostics\":[]}"))
             rpc.send(rpc.notification("textDocument/publishDiagnostics", p))
@@ -292,7 +292,7 @@ pub fn handle(inout s: S, body: List[u8]) uses io, fs, net, clock {
     let d = match json.parse(body) {
         Ok(x) => x
         Err(e) => {
-            var m2 = sys.lit("parse error: ")
+            let mut m2 = sys.lit("parse error: ")
             bytes.append(inout m2, json.error_text(e))
             rpc.log(m2)
             rpc.send(rpc.error(sys.lit("null"), rpc.PARSE_ERROR, m2))
@@ -344,7 +344,7 @@ pub fn handle(inout s: S, body: List[u8]) uses io, fs, net, clock {
     let reply = request(inout s, method, d, params, id)
     rpc.send(reply)
     if s.verbose {
-        var l = method
+        let mut l = method.copy()
         l.push(32)
         bytes.append(inout l, bytes.from_u64(now_ms() - t0))
         bytes.append(inout l, sys.lit(" ms, "))
@@ -378,7 +378,7 @@ fn notification(inout s: S, method: List[u8], d: json.Doc, params: u32) uses io,
         }
         // full sync: the last change's text is the document (a ranged change is applied)
         let changes = g(d, params, "contentChanges")
-        var doc = s.docs[i as usize]
+        let mut doc = s.docs[i as usize].copy()
         for k in 0..json.len(d, changes) {
             let c = json.at(d, changes, k).unwrap_or(NONE)
             let tx = json.as_str(d, g(d, c, "text")).unwrap_or(List.new())
@@ -388,7 +388,7 @@ fn notification(inout s: S, method: List[u8], d: json.Doc, params: u32) uses io,
             } else {
                 let a = t.offset_of_pos(doc.text, doc.starts, range_pos(d, rg, "start"))
                 let b = t.offset_of_pos(doc.text, doc.starts, range_pos(d, rg, "end"))
-                var nt = bytes.slice(doc.text, 0, a)
+                let mut nt = bytes.slice(doc.text, 0, a)
                 bytes.append(inout nt, tx)
                 let from = if b > a { b } else { a }
                 bytes.append(inout nt, bytes.slice(doc.text, from, doc.text.len()))
@@ -406,7 +406,7 @@ fn notification(inout s: S, method: List[u8], d: json.Doc, params: u32) uses io,
         // a saved file can change what its importers see: re-analyse every open document
         let uri = uri_param(d, params)
         for k in 0..s.docs.len() {
-            var doc = s.docs[k]
+            let mut doc = s.docs[k].copy()
             doc.dirty = true
             s.docs[k] = doc
         }
@@ -422,16 +422,16 @@ fn notification(inout s: S, method: List[u8], d: json.Doc, params: u32) uses io,
         if i == NONE { return }
         // clear what the document published
         let slot = s.slots[i as usize]
-        var all = slot.published
+        let mut all = slot.published.copy()
         all.push(uri)
         for u in all {
-            var p = sys.lit("{\"uri\":")
+            let mut p = sys.lit("{\"uri\":")
             json.quote_into(inout p, u)
             bytes.append(inout p, sys.lit(",\"diagnostics\":[]}"))
             rpc.send(rpc.notification("textDocument/publishDiagnostics", p))
         }
-        var docs: List[Doc] = List.new()
-        var slots: List[Slot] = List.new()
+        let mut docs: List[Doc] = List.new()
+        let mut slots: List[Slot] = List.new()
         for k in 0..s.docs.len() {
             if k != (i as usize) {
                 docs.push(s.docs[k])
@@ -499,7 +499,7 @@ fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8])
 }
 
 fn unknown(method: List[u8]) -> List[u8] {
-    var m2 = sys.lit("unknown method ")
+    let mut m2 = sys.lit("unknown method ")
     bytes.append(inout m2, method)
     m2
 }
@@ -518,7 +518,7 @@ fn roots_from(inout s: S, d: json.Doc, params: u32) {
 }
 
 fn capabilities() -> List[u8] {
-    var o = sys.lit("{\"capabilities\":{")
+    let mut o = sys.lit("{\"capabilities\":{")
     bytes.append(inout o, sys.lit("\"positionEncoding\":\"utf-16\","))
     bytes.append(inout o, sys.lit("\"textDocumentSync\":{\"openClose\":true,\"change\":1,\"save\":{\"includeText\":false}},"))
     bytes.append(inout o, sys.lit("\"hoverProvider\":true,\"definitionProvider\":true,\"referencesProvider\":true,"))

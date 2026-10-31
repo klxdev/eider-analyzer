@@ -9,7 +9,7 @@ impl Pair {
 const LIMIT: i32 = 10
 
 fn total(items: List[Pair]) -> i32 {
-    var acc = 0
+    let mut acc = 0
     for p in items {
         acc = acc + p.sum()
     }
@@ -18,7 +18,7 @@ fn total(items: List[Pair]) -> i32 {
 
 fn main() uses io {
     let p = Pair(1, 2)
-    var items: List[Pair] = List.new()
+    let mut items: List[Pair] = List.new()
     items.push(p)
     let shape = g.Circle(2)
     print(total(items) + g.area(shape) + LIMIT + p.left)

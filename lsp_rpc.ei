@@ -39,12 +39,12 @@ fn lower(c: u8) -> u8 {
 /// The value of header `name` (lowercase) in header text `h`, if present.
 fn header(h: List[u8], name: List[u8]) -> Option[List[u8]] {
     for line in bytes.split(h, 10) {
-        var l = line
+        let mut l = line.copy()
         if l.len() > 0 && l[l.len() - 1] == 13 { l = bytes.slice(l, 0, l.len() - 1) }
         match bytes.find_byte(l, 58, 0) {
             Some(c) => {
                 if c == name.len() {
-                    var same = true
+                    let mut same = true
                     for k in 0..c {
                         if lower(l[k]) != name[k] { same = false }
                     }
@@ -82,7 +82,7 @@ pub fn next(inout f: Framer) -> Frame {
         Some(x) => x
         None => {
             f.pos = body_at
-            var why = sys.lit("a header block without a valid Content-Length: ")
+            let mut why = sys.lit("a header block without a valid Content-Length: ")
             bytes.append(inout why, printable(h))
             return Dropped(why)
         }
@@ -99,7 +99,7 @@ pub fn next(inout f: Framer) -> Frame {
 
 /// `b` with control bytes as `?` and at most 200 bytes (for logs).
 pub fn printable(b: List[u8]) -> List[u8] {
-    var out: List[u8] = List.new()
+    let mut out: List[u8] = List.new()
     for i in 0..b.len() {
         if i >= 200 { break }
         let c = b[i]
@@ -112,7 +112,7 @@ pub fn printable(b: List[u8]) -> List[u8] {
 
 /// CR LF CR LF (Eider string literals have no `\r`).
 fn blank_line() -> List[u8] {
-    var b: List[u8] = List.new()
+    let mut b: List[u8] = List.new()
     b.push(13)
     b.push(10)
     b.push(13)
@@ -121,7 +121,7 @@ fn blank_line() -> List[u8] {
 }
 
 pub fn frame(body: List[u8]) -> List[u8] {
-    var out = sys.lit("Content-Length: ")
+    let mut out = sys.lit("Content-Length: ")
     bytes.append(inout out, bytes.from_u64(body.len() as u64))
     bytes.append(inout out, blank_line())
     bytes.append(inout out, body)
@@ -132,7 +132,7 @@ pub fn send(body: List[u8]) uses io { io.out(frame(body)) }
 
 /// `{"jsonrpc":"2.0","id":<id>,"result":<result>}` (`id` and `result` are JSON text).
 pub fn result(id: List[u8], res: List[u8]) -> List[u8] {
-    var o = sys.lit("{\"jsonrpc\":\"2.0\",\"id\":")
+    let mut o = sys.lit("{\"jsonrpc\":\"2.0\",\"id\":")
     bytes.append(inout o, id)
     bytes.append(inout o, sys.lit(",\"result\":"))
     bytes.append(inout o, res)
@@ -141,7 +141,7 @@ pub fn result(id: List[u8], res: List[u8]) -> List[u8] {
 }
 
 pub fn error(id: List[u8], code: i64, msg: List[u8]) -> List[u8] {
-    var o = sys.lit("{\"jsonrpc\":\"2.0\",\"id\":")
+    let mut o = sys.lit("{\"jsonrpc\":\"2.0\",\"id\":")
     bytes.append(inout o, id)
     bytes.append(inout o, sys.lit(",\"error\":{\"code\":"))
     bytes.append(inout o, bytes.from_i64(code))
@@ -152,7 +152,7 @@ pub fn error(id: List[u8], code: i64, msg: List[u8]) -> List[u8] {
 }
 
 pub fn notification(method: str, params: List[u8]) -> List[u8] {
-    var o = sys.lit("{\"jsonrpc\":\"2.0\",\"method\":")
+    let mut o = sys.lit("{\"jsonrpc\":\"2.0\",\"method\":")
     json.quote_into(inout o, sys.lit(method))
     bytes.append(inout o, sys.lit(",\"params\":"))
     bytes.append(inout o, params)
@@ -207,7 +207,7 @@ pub fn sep(inout o: List[u8]) {
 // ---- log (stderr; stdout is the protocol)
 
 pub fn log(msg: List[u8]) uses io {
-    var l = sys.lit("eider-analyzer: ")
+    let mut l = sys.lit("eider-analyzer: ")
     bytes.append(inout l, msg)
     io.errln(l)
 }

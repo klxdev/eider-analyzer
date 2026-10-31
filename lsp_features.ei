@@ -91,7 +91,7 @@ fn hit_at(r: Res, p: t.Pos) -> Hit {
 pub fn definition(r: Res, p: t.Pos) -> List[u8] {
     let h = hit_at(r, p)
     if !h.found { return sys.lit("null") }
-    var o: List[u8] = List.new()
+    let mut o: List[u8] = List.new()
     location_json(inout o, r, r.an.symbols[h.sym as usize].span)
     o
 }
@@ -99,7 +99,7 @@ pub fn definition(r: Res, p: t.Pos) -> List[u8] {
 pub fn references(r: Res, p: t.Pos, include_decl: bool) -> List[u8] {
     let h = hit_at(r, p)
     if !h.found { return sys.lit("null") }
-    var o = sys.lit("[")
+    let mut o = sys.lit("[")
     if include_decl {
         location_json(inout o, r, r.an.symbols[h.sym as usize].span)
     }
@@ -119,11 +119,11 @@ pub fn hover(r: Res, p: t.Pos) -> List[u8] {
     let e = eider_pos(r, p)
     let l = t.pk_line(e)
     let c = t.pk_col(e)
-    let h = hit_at(r, p)
+    let h0 = hit_at(r, p)
     // the innermost type at the position
-    var ty: List[u8] = List.new()
-    var ty_span = m.Span(0, 0, 0, 0, 0)
-    var best: u64 = 18446744073709551615
+    let mut ty: List[u8] = List.new()
+    let mut ty_span = m.Span(0, 0, 0, 0, 0)
+    let mut best: u64 = 18446744073709551615
     for x in r.an.types {
         if inside(x.span, l, c) {
             let size = t.pack(x.span.end_line - x.span.line, x.span.end_col) - t.pack(0, x.span.col)
@@ -134,25 +134,54 @@ pub fn hover(r: Res, p: t.Pos) -> List[u8] {
             }
         }
     }
-    if !h.found && ty.len() == 0 { return sys.lit("null") }
-    var md: List[u8] = List.new()
-    var span = ty_span
-    if h.found {
+    let mut h = h0.copy()
+    let mut builtin: List[u8] = List.new()
+    if !h.found && r.texts.len() > 0 && r.texts[0].len() > 0 {
+        // a name the checker recorded no reference for: a prelude item (`From` in
+        // `impl From[E] for T`) or a built-in type (`Ref` in `Ref.new(x)`)
+        let off = t.offset_of(r.texts[0], r.starts[0], l, c)
+        let w = t.word_at(r.texts[0], off)
+        let a = (w / 4294967296) as usize
+        let b = (w % 4294967296) as usize
+        if b > a {
+            let name = bytes.slice(r.texts[0], a, b)
+            let col = c - ((off - a) as u32)
+            let wspan = m.Span(0, l, col, l, col + ((b - a) as u32))
+            let pre = prelude_file(r)
+            for i in 0..r.an.symbols.len() {
+                let x = r.an.symbols[i]
+                if pre != 0 && x.span.file == pre && (x.kind == m.SK_TYPE || x.kind == m.SK_VARIANT || x.kind == m.SK_TRAIT) && bytes.eq(x.name, name) {
+                    h = Hit(i as u32, wspan, true)
+                    break
+                }
+            }
+            if !h.found && ty.len() == 0 {
+                builtin = builtin_doc(name)
+                if builtin.len() > 0 { ty_span = wspan }
+            }
+        }
+    }
+    if !h.found && ty.len() == 0 && builtin.len() == 0 { return sys.lit("null") }
+    let mut md: List[u8] = List.new()
+    let mut span = ty_span.copy()
+    if builtin.len() > 0 {
+        md = builtin
+    } else if h.found {
         let s = r.an.symbols[h.sym as usize]
         span = h.span
         md = sys.lit("```eider\n")
-        var d = s.detail
+        let mut d = s.detail.copy()
         if d.len() == 0 { d = s.name }
         // ide.ei's detail of a local is its type
         if s.kind == m.SK_LOCAL && !bytes.starts_with(d, s.name) && !bytes.starts_with(d, sys.lit("let")) && !bytes.starts_with(d, sys.lit("var")) && !bytes.starts_with(d, sys.lit("for")) {
-            var x = s.name
+            let mut x = s.name.copy()
             bytes.append(inout x, sys.lit(": "))
             bytes.append(inout x, d)
             d = x
         }
         bytes.append(inout md, d)
         bytes.append(inout md, sys.lit("\n```"))
-        var what = sys.lit(m.kind_name(s.kind))
+        let mut what = sys.lit(m.kind_name(s.kind))
         if s.container != m.NONE && (s.container as usize) < r.an.symbols.len() {
             bytes.append(inout what, sys.lit(" in `"))
             bytes.append(inout what, r.an.symbols[s.container as usize].name)
@@ -176,12 +205,53 @@ pub fn hover(r: Res, p: t.Pos) -> List[u8] {
         bytes.append(inout md, ty)
         bytes.append(inout md, sys.lit("\n```"))
     }
-    var o = sys.lit("{\"contents\":{\"kind\":\"markdown\",\"value\":")
+    let mut o = sys.lit("{\"contents\":{\"kind\":\"markdown\",\"value\":")
     json.quote_into(inout o, md)
     bytes.append(inout o, sys.lit("},\"range\":"))
     range_json(inout o, r, span)
     o.push(125)
     o
+}
+
+/// Hover text for a built-in type or function (they have no declaration to show).
+fn builtin_doc(name: List[u8]) -> List[u8] {
+    let mut sig = ""
+    let mut what = ""
+    if bytes.eq(name, sys.lit("Ref")) {
+        sig = "type Ref[T]"
+        what = "built-in type: a shared mutable cell, `Ref.new(v)`; `get`, `set`, `read(|x| ...)`, `update(|inout x| ...)` (docs/compiler.md, \"C8.7\")"
+    } else if bytes.eq(name, sys.lit("List")) {
+        sig = "type List[T]"
+        what = "built-in type: a growable array (copy-on-write)"
+    } else if bytes.eq(name, sys.lit("Map")) {
+        sig = "type Map[K, V]"
+        what = "built-in type: a hash map (`K: Hash + Eq`); `for (k, v) in m`"
+    } else if bytes.eq(name, sys.lit("String")) {
+        sig = "type String"
+        what = "built-in type: UTF-8 text without NUL"
+    } else if bytes.eq(name, sys.lit("str")) {
+        sig = "type str"
+        what = "built-in type: a string literal's text"
+    } else if bytes.eq(name, sys.lit("Box")) {
+        sig = "type Box[T]"
+        what = "built-in type: a value on the heap; `get`, `set`"
+    } else if bytes.eq(name, sys.lit("Mutex")) {
+        sig = "type Mutex[T]"
+        what = "built-in type: a value shared between threads; `get`, `set`, `update`"
+    } else if bytes.eq(name, sys.lit("Chan")) {
+        sig = "type Chan[T]"
+        what = "built-in type: a queue between threads; `send`, `recv`, `close`"
+    } else if bytes.eq(name, sys.lit("Task")) {
+        sig = "type Task[T]"
+        what = "built-in type: a spawned thread; `join`"
+    } else {
+        return List.new()
+    }
+    let mut md = sys.lit("```eider\n")
+    bytes.append(inout md, sys.lit(sig))
+    bytes.append(inout md, sys.lit("\n```\n\n"))
+    bytes.append(inout md, sys.lit(what))
+    md
 }
 
 fn base_name(path: List[u8]) -> List[u8] {
@@ -231,18 +301,18 @@ fn span_text(r: Res, s: m.Span) -> List[u8] {
 type Alias = { name: List[u8], file: u32 }
 
 fn aliases(r: Res) -> List[Alias] {
-    var out: List[Alias] = List.new()
+    let mut out: List[Alias] = List.new()
     for x in r.an.refs {
         if x.span.file != 0 || (x.target as usize) >= r.an.symbols.len() { continue }
         let s = r.an.symbols[x.target as usize]
         if s.kind != m.SK_MODULE || !whole_module(s) { continue }
-        var w = span_text(r, x.span)
+        let mut w = span_text(r, x.span)
         if w.len() == 0 { continue }
         if w[0] == 34 {
             // the import's path: its stem names the module unless an alias follows
             continue
         }
-        var dup = false
+        let mut dup = false
         for a in out {
             if bytes.eq(a.name, w) { dup = true }
         }
@@ -254,17 +324,17 @@ fn aliases(r: Res) -> List[Alias] {
 pub fn document_symbols(r: Res) -> List[u8] {
     let n = r.an.symbols.len()
     // children of each symbol (outline symbols of this file only), and which are roots
-    var first: List[u32] = List.new()
-    var next: List[u32] = List.new()
-    var last: List[u32] = List.new()
-    var has_variants: List[bool] = List.new()
+    let mut first: List[u32] = List.new()
+    let mut next: List[u32] = List.new()
+    let mut last: List[u32] = List.new()
+    let mut has_variants: List[bool] = List.new()
     for i in 0..n {
         first.push(m.NONE)
         next.push(m.NONE)
         last.push(m.NONE)
         has_variants.push(false)
     }
-    var roots: List[u32] = List.new()
+    let mut roots: List[u32] = List.new()
     for i in 0..n {
         let s = r.an.symbols[i]
         if s.span.file != 0 || !outline(s.kind) || whole_module(s) { continue }
@@ -282,7 +352,7 @@ pub fn document_symbols(r: Res) -> List[u8] {
             roots.push(i as u32)
         }
     }
-    var o = sys.lit("[")
+    let mut o = sys.lit("[")
     for x in roots { sym_json(inout o, r, x, first, next, has_variants, 0) }
     o.push(93)
     o
@@ -292,7 +362,7 @@ fn sym_json(inout o: List[u8], r: Res, i: u32, first: List[u32], next: List[u32]
     let s = r.an.symbols[i as usize]
     rpc.sep(inout o)
     o.push(123)
-    var name = s.name
+    let mut name = s.name.copy()
     if s.kind == m.SK_TEST {
         name = sys.lit("test ")
         json.quote_into(inout name, s.name)
@@ -302,12 +372,12 @@ fn sym_json(inout o: List[u8], r: Res, i: u32, first: List[u32], next: List[u32]
     rpc.kv_num(inout o, "kind", symbol_kind(s.kind, variants[i as usize]))
     rpc.key(inout o, "range")
     // the range must contain the selection range
-    var full = s.full
+    let mut full = s.full.copy()
     if full.file != s.span.file || t.pack(full.line, full.col) > t.pack(s.span.line, s.span.col) || t.pack(full.end_line, full.end_col) < t.pack(s.span.end_line, s.span.end_col) { full = s.span }
     range_json(inout o, r, full)
     rpc.key(inout o, "selectionRange")
     range_json(inout o, r, s.span)
-    var c = first[i as usize]
+    let mut c = first[i as usize].copy()
     if c != m.NONE && depth < 16 {
         bytes.append(inout o, sys.lit(",\"children\":["))
         while c != m.NONE {
@@ -322,7 +392,7 @@ fn sym_json(inout o: List[u8], r: Res, i: u32, first: List[u32], next: List[u32]
 // ---- folding ranges
 
 pub fn folding(r: Res) -> List[u8] {
-    var o = sys.lit("[")
+    let mut o = sys.lit("[")
     for s in r.an.symbols {
         let f = s.full
         if f.file != 0 || f.end_line <= f.line || !outline(s.kind) || whole_module(s) { continue }
@@ -333,8 +403,8 @@ pub fn folding(r: Res) -> List[u8] {
         o.push(125)
     }
     // runs of two or more import lines
-    var run_start: u32 = 0
-    var run_end: u32 = 0
+    let mut run_start: u32 = 0
+    let mut run_end: u32 = 0
     if r.texts.len() > 0 {
         let text = r.texts[0]
         let starts = r.starts[0]
@@ -391,17 +461,17 @@ fn token_type(k: u32) -> u32 {
 /// Bottom-up merge sort.
 pub fn sort_u64(xs: List[u64]) -> List[u64] {
     let n = xs.len()
-    var a = xs
-    var b = xs
-    var width: usize = 1
+    let mut a = xs.copy()
+    let mut b = xs.copy()
+    let mut width: usize = 1
     while width < n {
-        var i: usize = 0
+        let mut i: usize = 0
         while i < n {
             let mid = if i + width < n { i + width } else { n }
             let hi = if i + 2 * width < n { i + 2 * width } else { n }
-            var x = i
-            var y = mid
-            var k = i
+            let mut x = i.copy()
+            let mut y = mid.copy()
+            let mut k = i.copy()
             while k < hi {
                 if x < mid && (y >= hi || a[x] <= a[y]) {
                     b[k] = a[x]
@@ -414,7 +484,7 @@ pub fn sort_u64(xs: List[u64]) -> List[u64] {
             }
             i = hi
         }
-        let tmp = a
+        let tmp = a.copy()
         a = b
         b = tmp
         width = width * 2
@@ -425,14 +495,14 @@ pub fn sort_u64(xs: List[u64]) -> List[u64] {
 pub fn semantic_tokens(r: Res) -> List[u8] {
     if r.texts.len() == 0 { return sys.lit("{\"data\":[]}") }
     // candidates: (span, type, modifiers) packed for sorting by position
-    var spans: List[m.Span] = List.new()
-    var kinds: List[u32] = List.new()
-    var keys: List[u64] = List.new()
+    let mut spans: List[m.Span] = List.new()
+    let mut kinds: List[u32] = List.new()
+    let mut keys: List[u64] = List.new()
     for s in r.an.symbols {
         if s.span.file != 0 || s.span.line != s.span.end_line { continue }
         let tt = token_type(s.kind)
         if tt == m.NONE { continue }
-        var mods: u32 = 1
+        let mut mods: u32 = 1
         if s.kind == m.SK_CONST { mods = 3 }
         add_token(inout spans, inout kinds, inout keys, s.span, tt * 4 + mods)
     }
@@ -452,11 +522,11 @@ pub fn semantic_tokens(r: Res) -> List[u8] {
     let sorted = sort_u64(keys)
     let text = r.texts[0]
     let starts = r.starts[0]
-    var o = sys.lit("{\"data\":[")
-    var prev_line: u32 = 0
-    var prev_ch: u32 = 0
-    var prev_key: u64 = 0
-    var any = false
+    let mut o = sys.lit("{\"data\":[")
+    let mut prev_line: u32 = 0
+    let mut prev_ch: u32 = 0
+    let mut prev_key: u64 = 0
+    let mut any = false
     for key in sorted {
         let pos_key = key / 1048576
         if any && pos_key == prev_key { continue }
@@ -531,14 +601,14 @@ fn contains_name(xs: List[List[u8]], x: List[u8]) -> bool {
 pub fn completion(r: Res, text: List[u8], starts: List[u32], p: t.Pos) -> List[u8] {
     let off = t.offset_of_pos(text, starts, p)
     // the identifier prefix being typed
-    var a = off
+    let mut a = off.copy()
     while a > 0 && bytes.is_ident(text[a - 1]) { a -= 1 }
     let prefix = bytes.slice(text, a, off)
-    var o = sys.lit("{\"isIncomplete\":false,\"items\":[")
-    var seen: List[List[u8]] = List.new()
+    let mut o = sys.lit("{\"isIncomplete\":false,\"items\":[")
+    let mut seen: List[List[u8]] = List.new()
     if a > 0 && text[a - 1] == 46 {
         // `recv.`: the receiver's name
-        var b = a - 1
+        let mut b = a - 1
         while b > 0 && bytes.is_ident(text[b - 1]) { b -= 1 }
         let recv = bytes.slice(text, b, a - 1)
         members(inout o, inout seen, r, recv, prefix, (t.pos_of_offset(text, starts, b)).line + 1)
@@ -553,11 +623,14 @@ pub fn completion(r: Res, text: List[u8], starts: List[u32], p: t.Pos) -> List[u
 }
 
 fn keywords() -> List[List[u8]] {
-    var out: List[List[u8]] = List.new()
+    let mut out: List[List[u8]] = List.new()
     for w in ["fn", "type", "let", "var", "if", "else", "while", "for", "in", "return", "match", "true", "false", "uses", "test",
         "assert", "inout", "as", "const", "break", "continue", "import", "trait", "impl", "pub", "comptime", "extern", "export", "unsafe",
         "self", "Self", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "usize", "bool", "str", "String", "List", "Map", "Box",
-        "Option", "Result", "Some", "None", "Ok", "Err", "print", "panic", "len", "spawn", "Task", "Mutex", "Chan"] { out.push(sys.lit(w)) }
+        "Option", "Result", "Some", "None", "Ok", "Err", "print", "panic", "len", "spawn", "Task", "Mutex", "Chan",
+        // since docs/compiler.md C8.4 to C8.23: `let mut`, Ref[T] and the prelude's Ordering and traits
+        "mut", "Ref", "Ordering", "Less", "Equal", "Greater", "Copy", "Eq", "Ord", "Hash", "Show", "Iter", "Drop",
+        "From", "Default"] { out.push(sys.lit(w)) }
     out
 }
 
@@ -565,13 +638,13 @@ fn keywords() -> List[List[u8]] {
 /// and the parameters and locals of the function around the line declared before it.
 fn visible(inout o: List[u8], inout seen: List[List[u8]], r: Res, prefix: List[u8], line: u32) {
     // the innermost function (or test) whose full span holds the line
-    var cur = m.NONE
+    let mut cur = m.NONE
     for i in 0..r.an.symbols.len() {
         let s = r.an.symbols[i]
         if s.full.file == 0 && (s.kind == m.SK_FN || s.kind == m.SK_METHOD || s.kind == m.SK_TEST) && s.full.line <= line && line <= s.full.end_line { cur = i as u32 }
     }
     // locals first (newest first, so the innermost shadowing one wins)
-    var i = r.an.symbols.len()
+    let mut i = r.an.symbols.len()
     while i > 0 {
         i -= 1
         let s = r.an.symbols[i]
@@ -597,6 +670,25 @@ fn visible(inout o: List[u8], inout seen: List[List[u8]], r: Res, prefix: List[u
             item_json(inout o, s.name, completion_kind(s.kind), s.detail)
         }
     }
+    // the prelude's types, variants and traits (Option, Ordering, Less, Copy, From, Default, ...)
+    let pre = prelude_file(r)
+    if pre == 0 { return }
+    for s in r.an.symbols {
+        if s.span.file != pre || whole_module(s) { continue }
+        if !(s.kind == m.SK_TYPE || s.kind == m.SK_VARIANT || s.kind == m.SK_TRAIT) { continue }
+        if bytes.starts_with(s.name, prefix) && !contains_name(seen, s.name) {
+            seen.push(s.name)
+            item_json(inout o, s.name, completion_kind(s.kind), s.detail)
+        }
+    }
+}
+
+/// The index of core/prelude.ei in the analysis' files, or 0 (none: the lexical stand-in).
+fn prelude_file(r: Res) -> u32 {
+    for i in 1..r.an.files.len() {
+        if bytes.ends_with(r.an.files[i], sys.lit("/core/prelude.ei")) { return i as u32 }
+    }
+    0
 }
 
 /// Members after `recv.`: a module's public items, or the fields and methods of recv's
@@ -605,7 +697,7 @@ fn visible(inout o: List[u8], inout seen: List[List[u8]], r: Res, prefix: List[u
 fn members(inout o: List[u8], inout seen: List[List[u8]], r: Res, recv: List[u8], prefix: List[u8], line: u32) {
     // a module alias: from ide.analyze's references to modules, else the lexical
     // fallback's import symbols
-    var mf: u32 = 0
+    let mut mf: u32 = 0
     for a in aliases(r) {
         if bytes.eq(a.name, recv) { mf = a.file }
     }
@@ -627,9 +719,17 @@ fn members(inout o: List[u8], inout seen: List[List[u8]], r: Res, recv: List[u8]
     }
     // the receiver's type: a type name itself (`Point.`), else the type of the nearest
     // declaration named recv
-    var ty: List[u8] = List.new()
+    let mut ty: List[u8] = List.new()
     if recv.len() > 0 && recv[0] >= 65 && recv[0] <= 90 {
         ty = recv
+        // `T.default()` (docs/compiler.md, "C8.23"), `E.from(x)` ("C8.21")
+        for w in ["default", "from"] {
+            let b = sys.lit(w)
+            if bytes.starts_with(b, prefix) && !contains_name(seen, b) {
+                seen.push(b)
+                item_json(inout o, b, 3, List.new())
+            }
+        }
     } else {
         ty = type_of_name(r, recv, line)
     }
@@ -670,12 +770,12 @@ fn public(r: Res, x: m.Symbol) -> bool {
 fn module_file(r: Res, s: m.Symbol) -> u32 {
     // detail is `import "path" [as alias]`; match the path's last component
     let d = s.detail
-    var a: usize = 0
+    let mut a: usize = 0
     while a < d.len() && d[a] != 34 { a += 1 }
-    var b = a + 1
+    let mut b = a + 1
     while b < d.len() && d[b] != 34 { b += 1 }
     if b >= d.len() { return 0 }
-    var path = bytes.slice(d, a + 1, b)
+    let mut path = bytes.slice(d, a + 1, b)
     // `x` and `x.ei` name the same file
     let base = base_name(path)
     for i in 1..r.an.files.len() {
@@ -688,9 +788,9 @@ fn module_file(r: Res, s: m.Symbol) -> u32 {
 /// The declared type text of the nearest declaration or reference named `name` in this
 /// document, at or before `line` and inside the function around it.
 fn type_of_name(r: Res, name: List[u8], line: u32) -> List[u8] {
-    var best: List[u8] = List.new()
-    var best_line: u32 = 0
-    var first: u32 = 0
+    let mut best: List[u8] = List.new()
+    let mut best_line: u32 = 0
+    let mut first: u32 = 0
     for s in r.an.symbols {
         if s.full.file == 0 && (s.kind == m.SK_FN || s.kind == m.SK_METHOD || s.kind == m.SK_TEST) && s.full.line <= line && line <= s.full.end_line { first = s.full.line }
     }
@@ -714,11 +814,11 @@ fn type_of_name(r: Res, name: List[u8], line: u32) -> List[u8] {
 
 /// `List[Point]` -> `List`, `inout Point` -> `Point`, `g.Point` -> `Point`.
 fn type_head(ty: List[u8]) -> List[u8] {
-    var i: usize = 0
-    var out: List[u8] = List.new()
+    let mut i: usize = 0
+    let mut out: List[u8] = List.new()
     while i < ty.len() {
         while i < ty.len() && !bytes.is_ident(ty[i]) { i += 1 }
-        var w: List[u8] = List.new()
+        let mut w: List[u8] = List.new()
         while i < ty.len() && bytes.is_ident(ty[i]) {
             w.push(ty[i])
             i += 1
@@ -731,19 +831,36 @@ fn type_head(ty: List[u8]) -> List[u8] {
     out
 }
 
+/// The built-in methods of a type head (check.ei's `builtin_method` and `builtin_static`,
+/// the prelude's Option and Result), then the methods of the language's traits that most
+/// types have, derived (docs/compiler.md, "C8.4"), and `take`/`replace` ("C8.15").
 fn builtin_methods(head: List[u8]) -> List[List[u8]] {
-    var out: List[List[u8]] = List.new()
+    let mut out: List[List[u8]] = List.new()
     if bytes.eq(head, sys.lit("List")) {
-        for w in ["len", "push", "pop", "contains", "is_empty", "clear", "sum", "map", "filter", "for_each", "any", "all", "fold", "new"] { out.push(sys.lit(w)) }
+        for w in ["len", "push", "pop", "contains", "is_empty", "clear", "get", "sum", "map", "filter", "for_each", "any", "all", "fold", "new"] { out.push(sys.lit(w)) }
     } else if bytes.eq(head, sys.lit("String")) {
-        for w in ["len", "push_str", "push", "append", "from", "from_int", "new"] { out.push(sys.lit(w)) }
+        for w in ["len", "is_empty", "push_str", "push_byte", "append", "byte", "slice", "bytes", "from", "from_int", "from_bytes", "new"] { out.push(sys.lit(w)) }
+    } else if bytes.eq(head, sys.lit("str")) {
+        for w in ["len", "is_empty", "byte", "slice", "bytes"] { out.push(sys.lit(w)) }
     } else if bytes.eq(head, sys.lit("Map")) {
-        for w in ["insert", "get", "remove", "contains_key", "len", "new"] { out.push(sys.lit(w)) }
+        for w in ["insert", "get", "remove", "contains", "len", "is_empty", "keys", "values", "entries", "new"] { out.push(sys.lit(w)) }
     } else if bytes.eq(head, sys.lit("Option")) {
         for w in ["is_some", "is_none", "unwrap", "unwrap_or", "map", "and_then", "ok_or"] { out.push(sys.lit(w)) }
     } else if bytes.eq(head, sys.lit("Result")) {
         for w in ["is_ok", "is_err", "unwrap", "unwrap_or", "map", "map_err"] { out.push(sys.lit(w)) }
+    } else if bytes.eq(head, sys.lit("Ref")) {
+        // docs/compiler.md, "C8.7"
+        for w in ["get", "set", "read", "update", "new"] { out.push(sys.lit(w)) }
+    } else if bytes.eq(head, sys.lit("Box")) {
+        for w in ["get", "set", "new"] { out.push(sys.lit(w)) }
+    } else if bytes.eq(head, sys.lit("Mutex")) {
+        for w in ["get", "set", "update", "new"] { out.push(sys.lit(w)) }
+    } else if bytes.eq(head, sys.lit("Chan")) {
+        for w in ["send", "recv", "close", "new"] { out.push(sys.lit(w)) }
+    } else if bytes.eq(head, sys.lit("Task")) {
+        for w in ["join"] { out.push(sys.lit(w)) }
     }
+    for w in ["copy", "eq", "compare", "hash", "show", "to_string", "take", "replace"] { out.push(sys.lit(w)) }
     out
 }
 
@@ -759,7 +876,7 @@ fn diag_range(inout o: List[u8], r: Res, file: u32, line: u32, col: u32) {
     let text = r.texts[f]
     let starts = r.starts[f]
     let a = t.offset_of(text, starts, line, col)
-    var b = a
+    let mut b = a.copy()
     while b < text.len() && t.ident_byte(text[b]) {
         b += 1
     }
@@ -781,7 +898,7 @@ fn diag_json(inout o: List[u8], r: Res, d: m.Diag) {
     rpc.kv_num(inout o, "severity", 1)
     rpc.kv_str(inout o, "code", d.code)
     rpc.kv_str(inout o, "source", sys.lit("eider"))
-    var msg = d.msg
+    let mut msg = d.msg.copy()
     if d.help.len() > 0 {
         bytes.append(inout msg, sys.lit("\nhelp: "))
         bytes.append(inout msg, d.help)
@@ -792,7 +909,7 @@ fn diag_json(inout o: List[u8], r: Res, d: m.Diag) {
 
 /// The diagnostics of file `file` as a JSON array.
 pub fn diagnostics(r: Res, file: u32) -> List[u8] {
-    var o = sys.lit("[")
+    let mut o = sys.lit("[")
     for d in r.an.diags {
         if d.file != file { continue }
         rpc.sep(inout o)
@@ -804,9 +921,9 @@ pub fn diagnostics(r: Res, file: u32) -> List[u8] {
 
 /// The files with diagnostics (as indexes).
 pub fn diag_files(r: Res) -> List[u32] {
-    var out: List[u32] = List.new()
+    let mut out: List[u32] = List.new()
     for d in r.an.diags {
-        var dup = false
+        let mut dup = false
         for f in out {
             if f == d.file { dup = true }
         }
@@ -818,7 +935,7 @@ pub fn diag_files(r: Res) -> List[u32] {
 /// Quick fixes: every diagnostic of the document with a machine-applicable fix whose line
 /// is in [first_line, last_line] (0-based LSP lines).
 pub fn code_actions(r: Res, first_line: u32, last_line: u32) -> List[u8] {
-    var o = sys.lit("[")
+    let mut o = sys.lit("[")
     if r.texts.len() == 0 { return sys.lit("[]") }
     let text = r.texts[0]
     let starts = r.starts[0]
@@ -833,11 +950,11 @@ pub fn code_actions(r: Res, first_line: u32, last_line: u32) -> List[u8] {
         let near = (dl >= first_line && dl <= last_line) || (fl >= first_line && fl <= last_line)
         if !near { continue }
         let a = t.offset_of(text, starts, f.line, f.col)
-        var b = a + (f.delete as usize)
+        let mut b = a + (f.delete as usize)
         if f.delete > (text.len() as u64) || b > text.len() { b = text.len() }
         rpc.sep(inout o)
         o.push(123)
-        var title = sys.lit("Apply the compiler's fix: ")
+        let mut title = sys.lit("Apply the compiler's fix: ")
         if f.insert.len() > 0 && b == a {
             bytes.append(inout title, sys.lit("insert `"))
             bytes.append(inout title, bytes.trim(f.insert))
