@@ -1,7 +1,8 @@
 // lsp_standin: a lexical stand-in for compiler/ide.ei's symbols, references and types.
 //
-// Until ide.analyze lands, the adapter (lsp_analysis.ei) lexes each file with the compiler's
-// own lexer (so positions are exactly the compiler's) and hands the tokens here. This module
+// When the entry file lexes but does not parse, ide.analyze has no symbols; then the adapter
+// (lsp_analysis.ei) lexes the files with the compiler's own lexer (positions are exactly the
+// compiler's) and hands the tokens here. This module
 // recognises declarations in the token stream and resolves names by scope, without the type
 // checker:
 //

@@ -14,7 +14,7 @@
 // Architecture: lsp_rpc (framing, JSON-RPC output), lsp_server (state, documents,
 // dispatch, publishing), lsp_features (results from an analysis), lsp_text (UTF-16 and
 // URIs), lsp_model (the analysis data), lsp_analysis (the only module that touches the
-// compiler), lsp_standin (its temporary lexical symbols).
+// compiler), lsp_standin (lexical symbols for buffers that do not parse).
 
 import "deps/core/sys.ei"
 import "deps/std/bytes.ei"
