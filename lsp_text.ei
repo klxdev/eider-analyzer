@@ -1,0 +1,244 @@
+// lsp_text: positions in document text, and file URIs.
+//
+// Eider positions (compiler spans and diagnostics) are 1-based lines and 1-based columns
+// counted in Unicode scalar values. LSP positions are 0-based lines and 0-based characters
+// counted in UTF-16 code units (the default `positionEncoding`). Converting needs the text of
+// the line: a scalar below U+10000 is one UTF-16 unit, one above it (a 4-byte UTF-8
+// sequence) is two. Columns are counted like the compiler's lexer: a byte starts a scalar
+// unless it is a UTF-8 continuation byte (0x80..0xBF). Lines end at LF (a CR before it is
+// part of the line, as for the lexer, and is never counted past the end of the text).
+
+import "deps/core/sys.ei"
+import "deps/std/bytes.ei"
+
+/// An LSP position: 0-based line and UTF-16 character.
+pub type Pos = { line: u32, ch: u32 }
+
+/// Byte offsets of the start of every line (line 0 starts at 0).
+pub fn line_starts(text: List[u8]) -> List[u32] {
+    var out: List[u32] = List.new()
+    out.push(0)
+    for i in 0..text.len() {
+        if text[i] == 10 { out.push((i + 1) as u32) }
+    }
+    out
+}
+
+/// The byte offset just past the last byte of 0-based line `l` (before its LF).
+fn line_end(text: List[u8], starts: List[u32], l: usize) -> usize {
+    if l + 1 < starts.len() { return (starts[l + 1] - 1) as usize }
+    text.len()
+}
+
+/// UTF-16 units of the scalar whose UTF-8 sequence starts with byte `b` (0 for a
+/// continuation byte).
+pub fn units(b: u8) -> u32 {
+    if b >= 128 && b < 192 { return 0 }
+    if b >= 240 { return 2 }
+    1
+}
+
+/// Eider (line, col), 1-based in scalars, to a byte offset. Past the end of its line means
+/// the end of the line; past the last line means the end of the text.
+pub fn offset_of(text: List[u8], starts: List[u32], line: u32, col: u32) -> usize {
+    if line == 0 { return 0 }
+    let l = (line - 1) as usize
+    if l >= starts.len() { return text.len() }
+    var i = starts[l] as usize
+    let end = line_end(text, starts, l)
+    var c: u32 = 1
+    while i < end {
+        let b = text[i]
+        if b < 128 || b >= 192 {
+            if c == col { return i }
+            c += 1
+        }
+        i += 1
+    }
+    end
+}
+
+/// A byte offset to an LSP position.
+pub fn pos_of_offset(text: List[u8], starts: List[u32], off: usize) -> Pos {
+    // binary search for the line
+    var lo: usize = 0
+    var hi = starts.len()
+    while hi - lo > 1 {
+        let mid = (lo + hi) / 2
+        if (starts[mid] as usize) <= off { lo = mid } else { hi = mid }
+    }
+    var i = starts[lo] as usize
+    let stop = if off < text.len() { off } else { text.len() }
+    var ch: u32 = 0
+    while i < stop {
+        ch += units(text[i])
+        i += 1
+    }
+    Pos(lo as u32, ch)
+}
+
+/// Eider (line, col) to an LSP position.
+pub fn to_lsp(text: List[u8], starts: List[u32], line: u32, col: u32) -> Pos {
+    if line == 0 { return Pos(0, 0) }
+    let l = (line - 1) as usize
+    if l >= starts.len() {
+        // past the last line: the end of the text
+        return pos_of_offset(text, starts, text.len())
+    }
+    let end = line_end(text, starts, l)
+    var i = starts[l] as usize
+    var c: u32 = 1
+    var ch: u32 = 0
+    while i < end && c < col {
+        let b = text[i]
+        ch += units(b)
+        i += 1
+        // the next scalar starts at the next non-continuation byte
+        while i < end && text[i] >= 128 && text[i] < 192 { i += 1 }
+        c += 1
+    }
+    Pos(l as u32, ch)
+}
+
+/// An LSP position to a byte offset. A character past the end of the line means the end
+/// of the line; one inside a surrogate pair means the start of that scalar.
+pub fn offset_of_pos(text: List[u8], starts: List[u32], p: Pos) -> usize {
+    let l = p.line as usize
+    if l >= starts.len() { return text.len() }
+    let end = line_end(text, starts, l)
+    var i = starts[l] as usize
+    var ch: u32 = 0
+    while i < end {
+        let u = units(text[i])
+        if u > 0 {
+            if ch + u > p.ch { return i }
+            ch += u
+        }
+        i += 1
+    }
+    end
+}
+
+/// An LSP position to Eider (line, col): (line, col) packed as line * 2^32 + col.
+pub fn from_lsp(text: List[u8], starts: List[u32], p: Pos) -> u64 {
+    let off = offset_of_pos(text, starts, p)
+    let l = p.line as usize
+    if l >= starts.len() {
+        let last = starts.len() - 1
+        return pack((last + 1) as u32, col_at(text, starts[last] as usize, off))
+    }
+    pack(p.line + 1, col_at(text, starts[l] as usize, off))
+}
+
+fn col_at(text: List[u8], start: usize, off: usize) -> u32 {
+    var c: u32 = 1
+    var i = start
+    while i < off && i < text.len() {
+        let b = text[i]
+        if b < 128 || b >= 192 { c += 1 }
+        i += 1
+    }
+    c
+}
+
+pub fn pack(line: u32, col: u32) -> u64 { (line as u64) * 4294967296 + (col as u64) }
+pub fn pk_line(x: u64) -> u32 { (x / 4294967296) as u32 }
+pub fn pk_col(x: u64) -> u32 { (x % 4294967296) as u32 }
+
+/// Whether Eider position (l, c) is inside [l1:c1, l2:c2) (end exclusive). An empty span
+/// contains its start.
+pub fn contains(l1: u32, c1: u32, l2: u32, c2: u32, l: u32, c: u32) -> bool {
+    let p = pack(l, c)
+    let a = pack(l1, c1)
+    let b = pack(l2, c2)
+    if a == b { return p == a }
+    p >= a && p < b
+}
+
+/// The UTF-16 length of text[a..b].
+pub fn units_between(text: List[u8], a: usize, b: usize) -> u32 {
+    var n: u32 = 0
+    var i = a
+    while i < b && i < text.len() {
+        n += units(text[i])
+        i += 1
+    }
+    n
+}
+
+// ---- identifiers at a position
+
+pub fn ident_byte(b: u8) -> bool { bytes.is_ident(b) || b >= 128 }
+
+/// The identifier around byte offset `off` (start, end); start == end when there is none.
+pub fn word_at(text: List[u8], off: usize) -> u64 {
+    var a = off
+    while a > 0 && bytes.is_ident(text[a - 1]) { a -= 1 }
+    var b = off
+    while b < text.len() && bytes.is_ident(text[b]) { b += 1 }
+    (a as u64) * 4294967296 + (b as u64)
+}
+
+// ---- file URIs
+
+fn hexval(c: u8) -> i32 {
+    if c >= 48 && c <= 57 { return (c - 48) as i32 }
+    if c >= 97 && c <= 102 { return (c - 87) as i32 }
+    if c >= 65 && c <= 70 { return (c - 55) as i32 }
+    -1
+}
+
+/// `file:///a/b%20c.ei` -> `/a/b c.ei`. Anything that isn't a file URI (or a `file://host/`
+/// one) is returned undecoded after its scheme, so it never matches a real path.
+pub fn uri_to_path(uri: List[u8]) -> List[u8] uses ffi {
+    let pre = sys.lit("file://")
+    if !bytes.starts_with(uri, pre) { return uri }
+    var i = pre.len()
+    // skip an authority (`file://localhost/x`)
+    while i < uri.len() && uri[i] != 47 { i += 1 }
+    var out: List[u8] = List.new()
+    while i < uri.len() {
+        let c = uri[i]
+        if c == 37 && i + 2 < uri.len() && hexval(uri[i + 1]) >= 0 && hexval(uri[i + 2]) >= 0 {
+            out.push((hexval(uri[i + 1]) * 16 + hexval(uri[i + 2])) as u8)
+            i += 3
+        } else if c == 63 || c == 35 {
+            // a query or fragment is not part of the path
+            break
+        } else {
+            out.push(c)
+            i += 1
+        }
+    }
+    out
+}
+
+fn hex_digit(n: u8) -> u8 {
+    if n < 10 { return 48 + n }
+    55 + n
+}
+
+/// `/a/b c.ei` -> `file:///a/b%20c.ei` (everything but unreserved characters and `/`
+/// percent-encoded, as VS Code and Neovim spell them).
+pub fn path_to_uri(path: List[u8]) -> List[u8] uses ffi {
+    var out = sys.lit("file://")
+    for c in path {
+        if bytes.is_ident(c) || c == 47 || c == 45 || c == 46 || c == 126 {
+            out.push(c)
+        } else {
+            out.push(37)
+            out.push(hex_digit(c / 16))
+            out.push(hex_digit(c % 16))
+        }
+    }
+    out
+}
+
+/// The directory part of a path (`/a/b/c.ei` -> `/a/b`).
+pub fn dir_of(path: List[u8]) -> List[u8] {
+    match bytes.rfind_byte(path, 47) {
+        Some(0) => bytes.slice(path, 0, 1)
+        Some(i) => bytes.slice(path, 0, i)
+        None => List.new()
+    }
+}

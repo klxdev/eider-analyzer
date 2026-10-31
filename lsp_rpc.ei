@@ -1,0 +1,215 @@
+// lsp_rpc: JSON-RPC 2.0 over the LSP base protocol (`Content-Length: N\r\n\r\n` + N bytes).
+//
+// `Framer` turns a byte stream into message bodies: headers are `Name: value` lines ended by
+// CRLF and a blank line; the only header used is Content-Length (case-insensitive name). A
+// header block without a valid Content-Length is dropped (and reported), so garbage on the
+// input costs one block, not the session. Output helpers build responses and notifications
+// as text (strings are quoted with json.quote, which keeps the output valid UTF-8).
+
+import "deps/core/sys.ei"
+import "deps/std/bytes.ei"
+import "deps/std/io.ei"
+import "deps/json/json.ei"
+
+/// The largest body accepted (larger announcements are treated as malformed headers).
+pub const MAX_BODY: u64 = 268435456
+
+/// `buf[pos..]` is input not yet consumed.
+pub type Framer = { buf: List[u8], pos: usize }
+
+/// What `next` found: a body, a dropped header block (with the reason), or nothing yet.
+pub type Frame = | Body(bytes: List[u8]) | Dropped(why: List[u8]) | NeedMore
+
+pub fn framer() -> Framer { Framer(List.new(), 0) }
+
+pub fn feed(inout f: Framer, chunk: List[u8]) {
+    // drop what was consumed once it is most of the buffer
+    if f.pos > 0 && f.pos * 2 >= f.buf.len() {
+        f.buf = bytes.slice(f.buf, f.pos, f.buf.len())
+        f.pos = 0
+    }
+    for b in chunk { f.buf.push(b) }
+}
+
+fn lower(c: u8) -> u8 {
+    if c >= 65 && c <= 90 { return c + 32 }
+    c
+}
+
+/// The value of header `name` (lowercase) in header text `h`, if present.
+fn header(h: List[u8], name: List[u8]) -> Option[List[u8]] uses ffi {
+    for line in bytes.split(h, 10) {
+        var l = line
+        if l.len() > 0 && l[l.len() - 1] == 13 { l = bytes.slice(l, 0, l.len() - 1) }
+        match bytes.find_byte(l, 58, 0) {
+            Some(c) => {
+                if c == name.len() {
+                    var same = true
+                    for k in 0..c {
+                        if lower(l[k]) != name[k] { same = false }
+                    }
+                    if same { return Some(bytes.trim(bytes.slice(l, c + 1, l.len()))) }
+                }
+            }
+            None => {}
+        }
+    }
+    None
+}
+
+/// The next message in the buffer.
+pub fn next(inout f: Framer) -> Frame uses ffi {
+    if f.pos >= f.buf.len() { return NeedMore }
+    let sep = blank_line()
+    let end = match bytes.find(f.buf, sep, f.pos) {
+        Some(e) => e
+        None => {
+            // a runaway header (no blank line within 64 KiB) is dropped
+            if f.buf.len() - f.pos > 65536 {
+                f.pos = f.buf.len()
+                return Dropped(sys.lit("a header block longer than 64 KiB"))
+            }
+            return NeedMore
+        }
+    }
+    let h = bytes.slice(f.buf, f.pos, end)
+    let body_at = end + 4
+    let len: Option[u64] = match header(h, sys.lit("content-length")) {
+        Some(v) => bytes.parse_u64(v)
+        None => None
+    }
+    let n = match len {
+        Some(x) => x
+        None => {
+            f.pos = body_at
+            var why = sys.lit("a header block without a valid Content-Length: ")
+            bytes.append(inout why, printable(h))
+            return Dropped(why)
+        }
+    }
+    if n > MAX_BODY {
+        f.pos = body_at
+        return Dropped(sys.lit("a Content-Length over 256 MiB"))
+    }
+    if f.buf.len() - body_at < (n as usize) { return NeedMore }
+    let body = bytes.slice(f.buf, body_at, body_at + (n as usize))
+    f.pos = body_at + (n as usize)
+    Body(body)
+}
+
+/// `b` with control bytes as `?` and at most 200 bytes (for logs).
+pub fn printable(b: List[u8]) -> List[u8] {
+    var out: List[u8] = List.new()
+    for i in 0..b.len() {
+        if i >= 200 { break }
+        let c = b[i]
+        if c < 32 || c == 127 { out.push(63) } else { out.push(c) }
+    }
+    out
+}
+
+// ---- output
+
+/// CR LF CR LF (Eider string literals have no `\r`).
+fn blank_line() -> List[u8] {
+    var b: List[u8] = List.new()
+    b.push(13)
+    b.push(10)
+    b.push(13)
+    b.push(10)
+    b
+}
+
+pub fn frame(body: List[u8]) -> List[u8] uses ffi {
+    var out = sys.lit("Content-Length: ")
+    bytes.append(inout out, bytes.from_u64(body.len() as u64))
+    bytes.append(inout out, blank_line())
+    bytes.append(inout out, body)
+    out
+}
+
+pub fn send(body: List[u8]) uses io, ffi { io.out(frame(body)) }
+
+/// `{"jsonrpc":"2.0","id":<id>,"result":<result>}` (`id` and `result` are JSON text).
+pub fn result(id: List[u8], res: List[u8]) -> List[u8] uses ffi {
+    var o = sys.lit("{\"jsonrpc\":\"2.0\",\"id\":")
+    bytes.append(inout o, id)
+    bytes.append(inout o, sys.lit(",\"result\":"))
+    bytes.append(inout o, res)
+    o.push(125)
+    o
+}
+
+pub fn error(id: List[u8], code: i64, msg: List[u8]) -> List[u8] uses ffi {
+    var o = sys.lit("{\"jsonrpc\":\"2.0\",\"id\":")
+    bytes.append(inout o, id)
+    bytes.append(inout o, sys.lit(",\"error\":{\"code\":"))
+    bytes.append(inout o, bytes.from_i64(code))
+    bytes.append(inout o, sys.lit(",\"message\":"))
+    json.quote_into(inout o, msg)
+    bytes.append(inout o, sys.lit("}}"))
+    o
+}
+
+pub fn notification(method: str, params: List[u8]) -> List[u8] uses ffi {
+    var o = sys.lit("{\"jsonrpc\":\"2.0\",\"method\":")
+    json.quote_into(inout o, sys.lit(method))
+    bytes.append(inout o, sys.lit(",\"params\":"))
+    bytes.append(inout o, params)
+    o.push(125)
+    o
+}
+
+// JSON-RPC and LSP error codes
+pub const PARSE_ERROR: i64 = -32700
+pub const INVALID_REQUEST: i64 = -32600
+pub const METHOD_NOT_FOUND: i64 = -32601
+pub const INVALID_PARAMS: i64 = -32602
+pub const INTERNAL_ERROR: i64 = -32603
+pub const SERVER_NOT_INITIALIZED: i64 = -32002
+
+// ---- small JSON writers
+
+pub fn q(s: List[u8]) -> List[u8] { json.quote(s) }
+
+pub fn num(n: u64) -> List[u8] { bytes.from_u64(n) }
+
+/// `"key":` appended to `o`, after a comma unless `o` ends with `{` or `[`.
+pub fn key(inout o: List[u8], k: str) uses ffi {
+    if o.len() > 0 {
+        let c = o[o.len() - 1]
+        if c != 123 && c != 91 { o.push(44) }
+    }
+    json.quote_into(inout o, sys.lit(k))
+    o.push(58)
+}
+
+pub fn kv_str(inout o: List[u8], k: str, v: List[u8]) uses ffi {
+    key(inout o, k)
+    json.quote_into(inout o, v)
+}
+
+pub fn kv_num(inout o: List[u8], k: str, v: u64) uses ffi {
+    key(inout o, k)
+    bytes.append(inout o, bytes.from_u64(v))
+}
+
+pub fn kv_raw(inout o: List[u8], k: str, v: List[u8]) uses ffi {
+    key(inout o, k)
+    bytes.append(inout o, v)
+}
+
+/// A comma before the next array element unless `o` ends with `[`.
+pub fn sep(inout o: List[u8]) {
+    if o.len() > 0 && o[o.len() - 1] != 91 { o.push(44) }
+}
+
+// ---- log (stderr; stdout is the protocol)
+
+pub fn log(msg: List[u8]) uses io, ffi {
+    var l = sys.lit("eider-analyzer: ")
+    bytes.append(inout l, msg)
+    io.errln(l)
+}
+
+pub fn log_s(msg: str) uses io, ffi { log(sys.lit(msg)) }

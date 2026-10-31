@@ -1,0 +1,64 @@
+// lsp_model: what the server knows about a program, independent of the compiler.
+//
+// This mirrors compiler/ide.ei's contract (Span, Symbol, Ref, TypeAt, Analysis), with two
+// representation changes made by the adapter (lsp_analysis.ei): a span names its file by an
+// index into `Analysis.files` instead of carrying the path, and diagnostics are copied out
+// of the compiler's `diag.Diag` into `Diag` here. Positions are the compiler's: 1-based
+// lines, 1-based columns in Unicode scalars, ends exclusive.
+
+/// Symbol kinds (ide.ei's SK_* values).
+pub const SK_MODULE: u32 = 1
+pub const SK_TYPE: u32 = 2
+pub const SK_VARIANT: u32 = 3
+pub const SK_FIELD: u32 = 4
+pub const SK_FN: u32 = 5
+pub const SK_METHOD: u32 = 6
+pub const SK_CONST: u32 = 7
+pub const SK_TRAIT: u32 = 8
+pub const SK_PARAM: u32 = 9
+pub const SK_LOCAL: u32 = 10
+pub const SK_TEST: u32 = 11
+
+/// "no symbol" (a container or target that doesn't exist).
+pub const NONE: u32 = 4294967295
+
+pub type Span = { file: u32, line: u32, col: u32, end_line: u32, end_col: u32 }
+
+/// `span` is the name, `full` the whole declaration; `container` is the index of the
+/// enclosing symbol (a type for its fields and variants, a variant for its fields, a type
+/// or trait for methods, a function for its parameters and locals) or NONE.
+pub type Symbol = { name: List[u8], kind: u32, span: Span, full: Span, container: u32, detail: List[u8] }
+
+/// A use of symbol `target` at `span`.
+pub type Ref = { span: Span, target: u32 }
+
+/// The type of the expression or declaration at `span`, as source text.
+pub type TypeAt = { span: Span, text: List[u8] }
+
+/// A machine-applicable fix: at (line, col) delete `delete` bytes and insert `insert`.
+pub type Fix = { line: u32, col: u32, delete: u64, insert: List[u8] }
+
+pub type Diag = { code: List[u8], file: u32, line: u32, col: u32, msg: List[u8], help: List[u8], fix: Option[Fix] }
+
+pub type Analysis = { diags: List[Diag], symbols: List[Symbol], refs: List[Ref], types: List[TypeAt], files: List[List[u8]] }
+
+pub fn empty() -> Analysis { Analysis(List.new(), List.new(), List.new(), List.new(), List.new()) }
+
+pub fn span(file: u32, line: u32, col: u32, end_line: u32, end_col: u32) -> Span { Span(file, line, col, end_line, end_col) }
+
+pub fn kind_name(k: u32) -> str {
+    match k {
+        1 => "module"
+        2 => "type"
+        3 => "variant"
+        4 => "field"
+        5 => "function"
+        6 => "method"
+        7 => "constant"
+        8 => "trait"
+        9 => "parameter"
+        10 => "local"
+        11 => "test"
+        _ => "symbol"
+    }
+}

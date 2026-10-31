@@ -1,0 +1,16 @@
+# eider.lock: written by `eider-pkg`. Do not edit.
+version = 1
+
+[[package]]
+name = "eiderc"
+version = "0.1.0"
+source = "path+../eider-lang/compiler"
+deps = []
+grants = ["io", "fs", "net", "clock", "threads", "ffi"]
+
+[[package]]
+name = "json"
+version = "0.1.0"
+source = "path+../eider-lang/.claude/worktrees/agent-a9f5c4fe287b97adc/packages/json"
+deps = []
+grants = ["io"]
