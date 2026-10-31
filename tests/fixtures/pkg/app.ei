@@ -1,0 +1,3 @@
+import "util.ei"
+
+fn helper() -> i32 { util.one() }

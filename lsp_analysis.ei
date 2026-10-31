@@ -1,67 +1,81 @@
 // lsp_analysis: the adapter between the server and the compiler. It is the only module that
 // imports the compiler package (deps/eiderc); everything else sees lsp_model.ei.
 //
-// Status: STAND-IN. The compiler's IDE entry point, `ide.analyze` (compiler/ide.ei, being
-// written), will give diagnostics, symbols, references and types in one call. Until it is on
-// eider-lang main, `analyze` below
+// `analyze` calls the compiler's IDE entry point, `ide.analyze` (compiler/ide.ei): the
+// passes of `eiderc check` with the program's symbols, references and types recorded. The
+// adapter converts its records to lsp_model's: a Span's file path becomes an index into
+// `files` (paths normalised lexically, `a/./b/../c` -> `a/c`, since the compiler joins import
+// paths without resolving them), a container of index+1 (0: top level) becomes an index or
+// NONE, and diag.Diag becomes m.Diag (code, message and help as bytes).
 //
-//   1. runs the compiler's passes the way `eiderc check` does (compiler/main.ei): lex, parse,
-//      resolve.load, comptime evaluation, check.check_mode; each stops at its first error, so
-//      there is at most one diagnostic per analysis. A missing `main` (E0112 at 1:1, which the
-//      checker reports last) is dropped, so library modules aren't flagged. Notes on the
-//      passes: none of lex/parse/resolve/check exits the process; comptime evaluation
-//      (consteval.eval, only for files with `comptime` constants) builds and runs a program
-//      through driver.ei, and driver.fail exits the process when the toolchain can't be found
-//      (driver.root, exit 2) or no work directory can be made (exit 3). Imports are read from
-//      disk by resolve.load, so only the entry file's overlay (the open buffer) reaches the
-//      checker;
-//   2. lexes the entry file and its direct imports with the compiler's lexer and derives
-//      symbols, references and declared types from the tokens (lsp_standin.ei).
-//
-// Switching to ide.analyze is a change to this file only: replace the body of `analyze` with
-//
-//     let a = ide.analyze(entry, overlay_paths, overlay_texts)
-//     convert a.files (paths) to indexes, each ide.Span to an m.Span with that index,
-//     ide.Symbol/Ref/TypeAt to the m.* records (container: ide's index, or m.NONE), and
-//     each diag.Diag with `diag_of` below,
-//
-// and delete lsp_standin.ei.
+// When the entry file doesn't lex or parse (the usual state of a buffer mid-edit),
+// ide.analyze has no symbols to give. Then the symbols, references and declared types come
+// from lsp_standin.ei, a lexical scan of the compiler's tokens, so completion, outline and
+// navigation keep working while the user types. (That scan was the stand-in used before
+// ide.ei existed.)
 
 import "deps/core/sys.ei"
 import "deps/std/bytes.ei"
 import "deps/std/fs.ei"
 import "deps/eiderc/intern.ei"
 import "deps/eiderc/lex.ei"
-import "deps/eiderc/parse.ei"
 import "deps/eiderc/resolve.ei"
-import "deps/eiderc/check.ei"
-import "deps/eiderc/comptime.ei" as consteval
 import "deps/eiderc/diag.ei"
+import "deps/eiderc/ide.ei"
 import "lsp_model.ei" as m
 import "lsp_standin.ei" as standin
 
 /// Analyse the program whose entry file is `entry` (an absolute path). `overlay_texts[i]` is
 /// the text to use for `overlay_paths[i]` instead of what is on disk (unsaved buffers).
 pub fn analyze(entry: List[u8], overlay_paths: List[List[u8]], overlay_texts: List[List[u8]]) -> m.Analysis uses io, fs, net, clock, ffi {
-    var a = m.empty()
     let path = norm(entry)
+    let x = ide.analyze(path, overlay_paths, overlay_texts)
+    var a = m.empty()
     a.files.push(path)
-    let src = match text_of(path, overlay_paths, overlay_texts) {
-        Some(t) => t
-        None => {
-            var d = m.Diag(sys.lit("E0804"), 0, 1, 1, sys.lit("cannot read this file"), List.new(), None)
-            a.diags.push(d)
-            return a
+    for f in x.files { let ignored = file_id(inout a, norm(f)) }
+    var last: u32 = 0
+    for s in x.symbols {
+        let sp = span_of(inout a, inout last, s.span)
+        let full = span_of(inout a, inout last, s.full)
+        let c = if s.container == 0 { m.NONE } else { s.container - 1 }
+        a.symbols.push(m.Symbol(s.name, s.kind, sp, full, c, s.detail))
+    }
+    for r in x.refs {
+        let sp = span_of(inout a, inout last, r.span)
+        a.refs.push(m.Ref(sp, r.target))
+    }
+    for t in x.types {
+        let sp = span_of(inout a, inout last, t.span)
+        a.types.push(m.TypeAt(sp, t.text))
+    }
+    var lexing = false
+    for d in x.diags {
+        if bytes.eq(sys.lit(d.code), sys.lit("E0001")) { lexing = true }
+        let md = diag_of(inout a, d)
+        a.diags.push(md)
+    }
+    if lexing && a.symbols.len() == 0 {
+        match text_of(path, overlay_paths, overlay_texts) {
+            Some(src) => lexical(inout a, path, src, overlay_paths, overlay_texts)
+            None => {}
         }
     }
-    match check_file(path, src) {
-        Some(d) => {
-            if !no_main(d) { a.diags.push(diag_of(inout a, d)) }
-        }
-        None => {}
-    }
-    lexical(inout a, path, src, overlay_paths, overlay_texts)
     a
+}
+
+/// An ide.Span as an m.Span; `last` caches the file index of the previous span (spans come
+/// grouped by file).
+fn span_of(inout a: m.Analysis, inout last: u32, s: ide.Span) -> m.Span uses ffi {
+    if (last as usize) >= a.files.len() || !same_path(a.files[last as usize], s.file) {
+        last = file_id(inout a, norm(s.file))
+    }
+    m.Span(last, s.line, s.col, s.end_line, s.end_col)
+}
+
+/// `normalised` equals norm(`raw`) (cheaply when raw is already normal).
+fn same_path(normalised: List[u8], raw: List[u8]) -> bool uses ffi {
+    if bytes.eq(normalised, raw) { return true }
+    bytes.eq(normalised, norm(raw))
 }
 
 /// The prelude's path when it is missing (the toolchain can't be found), else empty.
@@ -79,42 +93,6 @@ pub fn absolute(path: List[u8]) -> List[u8] uses fs, ffi {
         Ok(p) => norm(p)
         Err(_) => path
     }
-}
-
-/// The compiler passes of `eiderc check` on (path, src): the first diagnostic, if any.
-fn check_file(path: List[u8], src: List[u8]) -> Option[diag.Diag] uses io, fs, net, clock, ffi {
-    var names = intern.new()
-    let r = lex.lex(src, inout names)
-    match resolve.lex_diag(r) {
-        Some(d) => { return Some(d) }
-        None => {}
-    }
-    let lx = match r {
-        lex.Done(l) => l
-        _ => { return None }
-    }
-    let parsed = match parse.parse(lx, names) {
-        Ok(x) => x
-        Err(d) => { return Some(d) }
-    }
-    let loaded = match resolve.load(path, src, parsed) {
-        Ok(x) => x
-        Err(d) => { return Some(d) }
-    }
-    let prog = match consteval.eval(loaded) {
-        Ok(x) => x
-        Err(d) => { return Some(d) }
-    }
-    match check.check_mode(prog, false) {
-        Ok(_) => None
-        Err(d) => Some(d)
-    }
-}
-
-/// E0112 "no `main` function" at 1:1: the checker reports it last, so on its own it means
-/// the file is fine as a module.
-fn no_main(d: diag.Diag) -> bool uses ffi {
-    bytes.eq(sys.lit(d.code), sys.lit("E0112")) && d.line == 1 && d.col == 1 && bytes.eq(d.msg, sys.lit("no `main` function"))
 }
 
 /// A compiler diagnostic as the model's (`file` indexes `a.files`, added if new). Module

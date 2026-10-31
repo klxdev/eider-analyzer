@@ -108,6 +108,34 @@ fn package_root(s: S, path: List[u8]) -> List[u8] uses fs, ffi {
     t.dir_of(path)
 }
 
+/// The path of the package's main file (`main = "..."` in `root`/eider.toml), or empty.
+fn package_main(root: List[u8]) -> List[u8] uses fs, ffi {
+    var toml = root
+    toml.push(47)
+    bytes.append(inout toml, sys.lit("eider.toml"))
+    let text: List[u8] = match fs.read(toml) {
+        Ok(x) => x
+        Err(_) => { return List.new() }
+    }
+    for line in bytes.lines(text) {
+        let l = bytes.trim(line)
+        if !bytes.starts_with(l, sys.lit("main")) { continue }
+        let rest = bytes.trim(bytes.slice(l, 4, l.len()))
+        if rest.len() < 3 || rest[0] != 61 { continue }
+        let v = bytes.trim(bytes.slice(rest, 1, rest.len()))
+        if v.len() < 2 || v[0] != 34 { continue }
+        let name = match bytes.find_byte(v, 34, 1) {
+            Some(e) => bytes.slice(v, 1, e)
+            None => { continue }
+        }
+        var p = root
+        p.push(47)
+        bytes.append(inout p, name)
+        return analysis.norm(p)
+    }
+    List.new()
+}
+
 fn open_doc(inout s: S, uri: List[u8], version: i64, text: List[u8]) uses io, fs, ffi {
     let path = t.uri_to_path(uri)
     let root = package_root(s, path)
@@ -141,7 +169,17 @@ pub fn analyze_doc(inout s: S, i: u32) uses io, fs, net, clock, ffi {
         texts.push(d.text)
     }
     let t0 = now_ms()
-    let an = analysis.analyze(doc.path, paths, texts)
+    var an = analysis.analyze(doc.path, paths, texts)
+    // a file is checked as a program, so a module without `main` ends with E0112; that is
+    // only an error in the package's main file (eider.toml `main`)
+    if !bytes.eq(doc.path, package_main(doc.root)) {
+        var kept: List[m.Diag] = List.new()
+        for x in an.diags {
+            let no_main = is(x.code, "E0112") && x.line == 1 && x.col == 1 && is(x.msg, "no `main` function")
+            if !no_main { kept.push(x) }
+        }
+        an.diags = kept
+    }
     s.analyses += 1
     // the texts the analysis saw, for position conversion
     var ftexts: List[List[u8]] = List.new()

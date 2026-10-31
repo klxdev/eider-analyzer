@@ -1,0 +1,10 @@
+# workspace roots by eider.toml: a module without `main` gets no E0112, the package's main
+# file (eider.toml `main = "app.ei"`) does
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/pkg/util.ei 1
+!open fixtures/pkg/app.ei 1
+# a definition across the package's modules
+{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/pkg/app.ei"},"position":{"line":2,"character":27}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

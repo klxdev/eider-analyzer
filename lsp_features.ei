@@ -75,7 +75,7 @@ fn hit_at(r: Res, p: t.Pos) -> Hit {
     }
     for i in 0..r.an.symbols.len() {
         let sp = r.an.symbols[i].span
-        if inside(sp, l, c) { return Hit(i as u32, sp, true) }
+        if inside(sp, l, c) && !whole_module(r.an.symbols[i]) { return Hit(i as u32, sp, true) }
     }
     // the end of an identifier (the cursor just after it) counts too
     if c > 1 {
@@ -143,6 +143,13 @@ pub fn hover(r: Res, p: t.Pos) -> List[u8] uses ffi {
         md = sys.lit("```eider\n")
         var d = s.detail
         if d.len() == 0 { d = s.name }
+        // ide.ei's detail of a local is its type
+        if s.kind == m.SK_LOCAL && !bytes.starts_with(d, s.name) && !bytes.starts_with(d, sys.lit("let")) && !bytes.starts_with(d, sys.lit("var")) && !bytes.starts_with(d, sys.lit("for")) {
+            var x = s.name
+            bytes.append(inout x, sys.lit(": "))
+            bytes.append(inout x, d)
+            d = x
+        }
         bytes.append(inout md, d)
         bytes.append(inout md, sys.lit("\n```"))
         var what = sys.lit(m.kind_name(s.kind))
@@ -205,6 +212,45 @@ fn symbol_kind(k: u32, variants: bool) -> u64 {
 
 fn outline(k: u32) -> bool { k != m.SK_PARAM && k != m.SK_LOCAL }
 
+/// ide.analyze's symbol for a whole module (span 1:1-1:1, full: the file): not an item of
+/// the outline. (The lexical fallback's module symbols are import aliases, with a name span.)
+fn whole_module(s: m.Symbol) -> bool {
+    s.kind == m.SK_MODULE && s.span.line == s.span.end_line && s.span.col == s.span.end_col
+}
+
+/// The source text of a span in file 0 (empty if it spans lines).
+fn span_text(r: Res, s: m.Span) -> List[u8] {
+    if s.file != 0 || s.line != s.end_line || r.texts.len() == 0 { return List.new() }
+    let a = t.offset_of(r.texts[0], r.starts[0], s.line, s.col)
+    let b = t.offset_of(r.texts[0], r.starts[0], s.end_line, s.end_col)
+    bytes.slice(r.texts[0], a, b)
+}
+
+/// The import aliases of the document (`g` in `import "geo.ei" as g`, `geo` without `as`)
+/// with the file of their module: (name, file) from references to module symbols.
+type Alias = { name: List[u8], file: u32 }
+
+fn aliases(r: Res) -> List[Alias] {
+    var out: List[Alias] = List.new()
+    for x in r.an.refs {
+        if x.span.file != 0 || (x.target as usize) >= r.an.symbols.len() { continue }
+        let s = r.an.symbols[x.target as usize]
+        if s.kind != m.SK_MODULE || !whole_module(s) { continue }
+        var w = span_text(r, x.span)
+        if w.len() == 0 { continue }
+        if w[0] == 34 {
+            // the import's path: its stem names the module unless an alias follows
+            continue
+        }
+        var dup = false
+        for a in out {
+            if bytes.eq(a.name, w) { dup = true }
+        }
+        if !dup { out.push(Alias(w, s.span.file)) }
+    }
+    out
+}
+
 pub fn document_symbols(r: Res) -> List[u8] uses ffi {
     let n = r.an.symbols.len()
     // children of each symbol (outline symbols of this file only), and which are roots
@@ -221,7 +267,7 @@ pub fn document_symbols(r: Res) -> List[u8] uses ffi {
     var roots: List[u32] = List.new()
     for i in 0..n {
         let s = r.an.symbols[i]
-        if s.span.file != 0 || !outline(s.kind) { continue }
+        if s.span.file != 0 || !outline(s.kind) || whole_module(s) { continue }
         let c = s.container
         let parented = c != m.NONE && (c as usize) < n && r.an.symbols[c as usize].span.file == 0 && outline(r.an.symbols[c as usize].kind)
         if parented {
@@ -279,7 +325,7 @@ pub fn folding(r: Res) -> List[u8] uses ffi {
     var o = sys.lit("[")
     for s in r.an.symbols {
         let f = s.full
-        if f.file != 0 || f.end_line <= f.line || !outline(s.kind) { continue }
+        if f.file != 0 || f.end_line <= f.line || !outline(s.kind) || whole_module(s) { continue }
         rpc.sep(inout o)
         o.push(123)
         rpc.kv_num(inout o, "startLine", (f.line - 1) as u64)
@@ -289,14 +335,21 @@ pub fn folding(r: Res) -> List[u8] uses ffi {
     // runs of two or more import lines
     var run_start: u32 = 0
     var run_end: u32 = 0
-    for s in r.an.symbols {
-        if s.kind != m.SK_MODULE || s.full.file != 0 { continue }
-        if run_end > 0 && s.full.line == run_end + 1 {
-            run_end = s.full.line
-        } else {
-            folding_imports(inout o, run_start, run_end)
-            run_start = s.full.line
-            run_end = s.full.line
+    if r.texts.len() > 0 {
+        let text = r.texts[0]
+        let starts = r.starts[0]
+        let kw = sys.lit("import ")
+        for i in 0..starts.len() {
+            let a = starts[i] as usize
+            let line = (i + 1) as u32
+            if !bytes.starts_with(bytes.slice(text, a, a + kw.len()), kw) { continue }
+            if run_end > 0 && line == run_end + 1 {
+                run_end = line
+            } else {
+                folding_imports(inout o, run_start, run_end)
+                run_start = line
+                run_end = line
+            }
         }
     }
     folding_imports(inout o, run_start, run_end)
@@ -388,6 +441,11 @@ pub fn semantic_tokens(r: Res) -> List[u8] uses ffi {
         let k = r.an.symbols[x.target as usize].kind
         let tt = token_type(k)
         if tt == m.NONE { continue }
+        // an import's path is a string, not a name
+        if k == m.SK_MODULE {
+            let w = span_text(r, x.span)
+            if w.len() > 0 && w[0] == 34 { continue }
+        }
         let mods: u32 = if k == m.SK_CONST { 2 } else { 0 }
         add_token(inout spans, inout kinds, inout keys, x.span, tt * 4 + mods)
     }
@@ -524,8 +582,14 @@ fn visible(inout o: List[u8], inout seen: List[List[u8]], r: Res, prefix: List[u
             item_json(inout o, s.name, 6, s.detail)
         }
     }
+    for a in aliases(r) {
+        if bytes.starts_with(a.name, prefix) && !contains_name(seen, a.name) {
+            seen.push(a.name)
+            item_json(inout o, a.name, 9, List.new())
+        }
+    }
     for s in r.an.symbols {
-        if s.span.file != 0 { continue }
+        if s.span.file != 0 || whole_module(s) { continue }
         let item = s.kind == m.SK_MODULE || s.kind == m.SK_TYPE || s.kind == m.SK_VARIANT || s.kind == m.SK_FN || s.kind == m.SK_CONST || s.kind == m.SK_TRAIT
         if !item { continue }
         if bytes.starts_with(s.name, prefix) && !contains_name(seen, s.name) {
@@ -539,20 +603,27 @@ fn visible(inout o: List[u8], inout seen: List[List[u8]], r: Res, prefix: List[u
 /// type (by the declared type of the local, parameter, field or constant named recv), or
 /// the built-in methods of List, String, Map, Option and Result.
 fn members(inout o: List[u8], inout seen: List[List[u8]], r: Res, recv: List[u8], prefix: List[u8], line: u32) uses ffi {
-    // a module alias
-    for s in r.an.symbols {
-        if s.kind == m.SK_MODULE && s.span.file == 0 && bytes.eq(s.name, recv) {
-            let mf = module_file(r, s)
-            for x in r.an.symbols {
-                if x.span.file != mf || mf == 0 { continue }
-                let item = x.kind == m.SK_TYPE || x.kind == m.SK_VARIANT || x.kind == m.SK_FN || x.kind == m.SK_CONST || x.kind == m.SK_TRAIT
-                if item && bytes.starts_with(x.name, prefix) && !contains_name(seen, x.name) {
-                    seen.push(x.name)
-                    item_json(inout o, x.name, completion_kind(x.kind), x.detail)
-                }
-            }
-            return
+    // a module alias: from ide.analyze's references to modules, else the lexical
+    // fallback's import symbols
+    var mf: u32 = 0
+    for a in aliases(r) {
+        if bytes.eq(a.name, recv) { mf = a.file }
+    }
+    if mf == 0 {
+        for s in r.an.symbols {
+            if s.kind == m.SK_MODULE && s.span.file == 0 && !whole_module(s) && bytes.eq(s.name, recv) { mf = module_file(r, s) }
         }
+    }
+    if mf != 0 {
+        for x in r.an.symbols {
+            if x.span.file != mf { continue }
+            let item = x.kind == m.SK_TYPE || x.kind == m.SK_VARIANT || x.kind == m.SK_FN || x.kind == m.SK_CONST || x.kind == m.SK_TRAIT
+            if item && public(r, x) && bytes.starts_with(x.name, prefix) && !contains_name(seen, x.name) {
+                seen.push(x.name)
+                item_json(inout o, x.name, completion_kind(x.kind), x.detail)
+            }
+        }
+        return
     }
     // the receiver's type: a type name itself (`Point.`), else the type of the nearest
     // declaration named recv
@@ -581,6 +652,17 @@ fn members(inout o: List[u8], inout seen: List[List[u8]], r: Res, recv: List[u8]
             item_json(inout o, b, 2, List.new())
         }
     }
+}
+
+/// A module item usable from another module: declared `pub` (its detail is its source
+/// form), or a variant of a `pub` type.
+fn public(r: Res, x: m.Symbol) -> bool uses ffi {
+    let p = sys.lit("pub ")
+    if bytes.starts_with(x.detail, p) { return true }
+    if x.kind == m.SK_VARIANT && x.container != m.NONE && (x.container as usize) < r.an.symbols.len() {
+        return bytes.starts_with(r.an.symbols[x.container as usize].detail, p)
+    }
+    false
 }
 
 /// The file an import's module symbol refers to: the analysis file whose stem is the alias
