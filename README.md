@@ -48,17 +48,24 @@ EIDER_LANG=/path/to/eider-lang sh scripts/build.sh   # default: ../eider-lang
 The sources import their dependencies by package name (`import "eiderc/ide"`,
 `import "json"`, `import "std/fs"`), which the compiler resolves through `eider.lock`
 (eider-lang docs/compiler.md, "C8.3: packages and modules"); there is no `deps/` link farm.
-`scripts/build.sh` runs `eider-lang/scripts/eider-pkg -C . fetch` when `eider.lock` is
-missing, builds `target/eiderc` from eider-lang's `compiler/` (package imports need a
-compiler newer than its seed) and then `target/bin/eider-analyzer`.
+`scripts/build.sh` runs `eider-lang/scripts/eider-pkg -C . fetch`, builds `target/eiderc`
+from eider-lang's `compiler/` (package imports need a compiler newer than its seed) and then
+`target/bin/eider-analyzer`.
 
 ### Dependencies
 
-`eider.toml` points at eider-lang's `compiler` (package `eiderc`) and `packages/json` as path
-dependencies, `../eider-lang/...` (an eider-lang checkout next to this repository); core
-and std (including `io.read`, which the server reads stdin with) come from the same
-eider-lang checkout's toolchain. A different checkout means a different `eider.toml` path
-and `eider-pkg -C . fetch`: the compiler and std must come from one checkout.
+`eider.toml` points at eider-lang's `compiler` (package `eiderc`) as a path dependency,
+`../eider-lang/compiler` (an eider-lang checkout next to this repository); core and std
+(including `io.read`, which the server reads stdin with) come from the same eider-lang
+checkout's toolchain. A different checkout means a different `eider.toml` path and
+`eider-pkg -C . fetch`: the compiler and std must come from one checkout.
+
+json is [eider-json](https://github.com/klxdev/eider-json) 0.1.0, a git dependency.
+`scripts/build.sh` fetches it offline through eider-pkg's `EIDER_PKG_OVERRIDE` (a local
+directory standing in for the repository; eider-lang's docs/site/tooling/eider-pkg.md):
+`$EIDER_JSON`, else the checkout `../eider-json`, else the eider-lang checkout's pinned
+release `vendor/json`. With the override at the locked release, `eider.lock` is what a
+fetch from GitHub writes (the same commit and content hash).
 
 ### Version
 

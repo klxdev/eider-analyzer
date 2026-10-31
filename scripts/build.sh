@@ -30,9 +30,22 @@ if [ "${theirs%.*}" != "${mine%.*}" ]; then
   echo "build.sh: eider-analyzer $mine needs an Eider ${mine%.*}.x toolchain, but $toolchain is Eider $theirs; use the eider-analyzer release made with that toolchain (docs/site/tooling/releases.md in eider-lang)" >&2
   exit 2
 fi
-if [ ! -f "$here/eider.lock" ]; then
-  "$toolchain/scripts/eider-pkg" -C "$here" fetch
-fi
+# json is a git package (eider-json). Offline, eider-pkg takes it from a local directory
+# (EIDER_PKG_OVERRIDE, eider-lang's docs/site/tooling/eider-pkg.md): $EIDER_JSON, else the
+# checkout ../eider-json, else the toolchain's pinned release vendor/json. eider.lock keeps
+# the git source and the content hash; the fetch runs every time, since the store copy it
+# points at may not be there yet.
+case ",$EIDER_PKG_OVERRIDE," in
+  *,json=*) ;;
+  *)
+    json=${EIDER_JSON:-}
+    [ -n "$json" ] || { [ -f "$here/../eider-json/eider.toml" ] && json=$here/../eider-json; }
+    [ -n "$json" ] || { [ -f "$toolchain/vendor/json/eider.toml" ] && json=$toolchain/vendor/json; }
+    [ -z "$json" ] || EIDER_PKG_OVERRIDE="${EIDER_PKG_OVERRIDE:+$EIDER_PKG_OVERRIDE,}json=$(cd "$json" && pwd -P)"
+    ;;
+esac
+export EIDER_PKG_OVERRIDE
+"$toolchain/scripts/eider-pkg" -C "$here" fetch > /dev/null
 mkdir -p "$here/target/bin"
 eiderc=$here/target/eiderc
 if [ ! -x "$eiderc" ] || [ -n "$(find "$toolchain/compiler" "$toolchain/std" "$toolchain/core" -name '*.ei' -newer "$eiderc" 2>/dev/null | head -1)" ]; then

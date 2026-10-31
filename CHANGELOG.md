@@ -17,6 +17,8 @@ The first release, with Eider 0.1.0.
 - Debounced analysis on a reader thread; a lexical stand-in for buffers that don't parse;
   UTF-16 positions.
 - Package imports through `eider.lock`, capability grants from the compiler.
+- json is eider-json 0.1.0, a git dependency, fetched offline from a sibling checkout or the
+  toolchain's vendor/json (`EIDER_PKG_OVERRIDE`; eider-lang's U19).
 - The language through eider-lang's docs/compiler.md C8.25.
 - A Claude Code plugin (`.claude-plugin/marketplace.json`, marketplace `eider`, plugin
   `eider-lsp`).

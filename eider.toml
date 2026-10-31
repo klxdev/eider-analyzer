@@ -7,8 +7,11 @@ description = "eider-analyzer: a language server (LSP 3.17) for Eider, written i
 
 # Grants are what each package's code uses, as the compiler reports it (`eiderc caps`) and
 # checks when it builds (E0204): json uses nothing, so it is granted nothing.
+# A git package: scripts/build.sh takes it from a local checkout when it can
+# (EIDER_PKG_OVERRIDE: ../eider-json, else the toolchain's pinned copy vendor/json).
 [deps.json]
-path = "../eider-lang/packages/json"
+git = "https://github.com/klxdev/eider-json.git"
+version = "0.1.0"
 
 # The compiler package (eider-lang/compiler): lexer, parser, checker, diagnostics. Only
 # lsp_analysis.ei imports it. No `ffi`: the compiler has no unmanaged code of its own (it
