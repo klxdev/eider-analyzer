@@ -1,0 +1,795 @@
+// lsp_features: LSP results computed from one analysis (lsp_model.Analysis) and the texts
+// it was computed from. Every function returns the JSON text of a `result`; none of them
+// can fail: a position nothing is at gives `null` or an empty list.
+
+import "deps/core/sys.ei"
+import "deps/std/bytes.ei"
+import "deps/json/json.ei"
+import "lsp_model.ei" as m
+import "lsp_text.ei" as t
+import "lsp_rpc.ei" as rpc
+
+/// An analysis of the document `uri` (file 0): the texts of every file in `an.files` as
+/// they were analysed (empty when unreadable) and their line tables.
+pub type Res = { an: m.Analysis, texts: List[List[u8]], starts: List[List[u32]], uri: List[u8], version: i64 }
+
+pub fn uri_of(r: Res, file: u32) -> List[u8] uses ffi {
+    if file == 0 { return r.uri }
+    if (file as usize) < r.an.files.len() { return t.path_to_uri(r.an.files[file as usize]) }
+    r.uri
+}
+
+fn pos_json(inout o: List[u8], p: t.Pos) uses ffi {
+    bytes.append(inout o, sys.lit("{\"line\":"))
+    bytes.append(inout o, rpc.num(p.line as u64))
+    bytes.append(inout o, sys.lit(",\"character\":"))
+    bytes.append(inout o, rpc.num(p.ch as u64))
+    o.push(125)
+}
+
+/// Eider (line, col) in file `file` as an LSP position.
+pub fn lsp_pos(r: Res, file: u32, line: u32, col: u32) -> t.Pos {
+    let f = file as usize
+    if f < r.texts.len() && r.texts[f].len() > 0 { return t.to_lsp(r.texts[f], r.starts[f], line, col) }
+    // no text: assume ASCII
+    let l: u32 = if line > 0 { line - 1 } else { 0 }
+    let c: u32 = if col > 0 { col - 1 } else { 0 }
+    t.Pos(l, c)
+}
+
+pub fn range_json(inout o: List[u8], r: Res, s: m.Span) uses ffi {
+    bytes.append(inout o, sys.lit("{\"start\":"))
+    pos_json(inout o, lsp_pos(r, s.file, s.line, s.col))
+    bytes.append(inout o, sys.lit(",\"end\":"))
+    pos_json(inout o, lsp_pos(r, s.file, s.end_line, s.end_col))
+    o.push(125)
+}
+
+fn location_json(inout o: List[u8], r: Res, s: m.Span) uses ffi {
+    bytes.append(inout o, sys.lit("{\"uri\":"))
+    json.quote_into(inout o, uri_of(r, s.file))
+    bytes.append(inout o, sys.lit(",\"range\":"))
+    range_json(inout o, r, s)
+    o.push(125)
+}
+
+/// An LSP position in the document as Eider (line, col) packed (lsp_text.pack).
+pub fn eider_pos(r: Res, p: t.Pos) -> u64 {
+    if r.texts.len() == 0 { return t.pack(p.line + 1, p.ch + 1) }
+    t.from_lsp(r.texts[0], r.starts[0], p)
+}
+
+fn inside(s: m.Span, l: u32, c: u32) -> bool {
+    s.file == 0 && t.contains(s.line, s.col, s.end_line, s.end_col, l, c)
+}
+
+/// What is at the position: a reference's target or a declaration, with the span there.
+type Hit = { sym: u32, span: m.Span, found: bool }
+
+fn hit_at(r: Res, p: t.Pos) -> Hit {
+    let e = eider_pos(r, p)
+    let l = t.pk_line(e)
+    let c = t.pk_col(e)
+    for x in r.an.refs {
+        if inside(x.span, l, c) && (x.target as usize) < r.an.symbols.len() { return Hit(x.target, x.span, true) }
+    }
+    for i in 0..r.an.symbols.len() {
+        let sp = r.an.symbols[i].span
+        if inside(sp, l, c) { return Hit(i as u32, sp, true) }
+    }
+    // the end of an identifier (the cursor just after it) counts too
+    if c > 1 {
+        for x in r.an.refs {
+            if x.span.file == 0 && x.span.end_line == l && x.span.end_col == c && (x.target as usize) < r.an.symbols.len() { return Hit(x.target, x.span, true) }
+        }
+    }
+    Hit(0, m.Span(0, 0, 0, 0, 0), false)
+}
+
+// ---- definition, references
+
+pub fn definition(r: Res, p: t.Pos) -> List[u8] uses ffi {
+    let h = hit_at(r, p)
+    if !h.found { return sys.lit("null") }
+    var o: List[u8] = List.new()
+    location_json(inout o, r, r.an.symbols[h.sym as usize].span)
+    o
+}
+
+pub fn references(r: Res, p: t.Pos, include_decl: bool) -> List[u8] uses ffi {
+    let h = hit_at(r, p)
+    if !h.found { return sys.lit("null") }
+    var o = sys.lit("[")
+    if include_decl {
+        location_json(inout o, r, r.an.symbols[h.sym as usize].span)
+    }
+    for x in r.an.refs {
+        if x.target == h.sym {
+            rpc.sep(inout o)
+            location_json(inout o, r, x.span)
+        }
+    }
+    o.push(93)
+    o
+}
+
+// ---- hover
+
+pub fn hover(r: Res, p: t.Pos) -> List[u8] uses ffi {
+    let e = eider_pos(r, p)
+    let l = t.pk_line(e)
+    let c = t.pk_col(e)
+    let h = hit_at(r, p)
+    // the innermost type at the position
+    var ty: List[u8] = List.new()
+    var ty_span = m.Span(0, 0, 0, 0, 0)
+    var best: u64 = 18446744073709551615
+    for x in r.an.types {
+        if inside(x.span, l, c) {
+            let size = t.pack(x.span.end_line - x.span.line, x.span.end_col) - t.pack(0, x.span.col)
+            if size < best {
+                best = size
+                ty = x.text
+                ty_span = x.span
+            }
+        }
+    }
+    if !h.found && ty.len() == 0 { return sys.lit("null") }
+    var md: List[u8] = List.new()
+    var span = ty_span
+    if h.found {
+        let s = r.an.symbols[h.sym as usize]
+        span = h.span
+        md = sys.lit("```eider\n")
+        var d = s.detail
+        if d.len() == 0 { d = s.name }
+        bytes.append(inout md, d)
+        bytes.append(inout md, sys.lit("\n```"))
+        var what = sys.lit(m.kind_name(s.kind))
+        if s.container != m.NONE && (s.container as usize) < r.an.symbols.len() {
+            bytes.append(inout what, sys.lit(" in `"))
+            bytes.append(inout what, r.an.symbols[s.container as usize].name)
+            what.push(96)
+        }
+        if s.span.file != 0 && (s.span.file as usize) < r.an.files.len() {
+            bytes.append(inout what, sys.lit(" (`"))
+            bytes.append(inout what, base_name(r.an.files[s.span.file as usize]))
+            bytes.append(inout what, sys.lit("`)"))
+        }
+        bytes.append(inout md, sys.lit("\n\n"))
+        bytes.append(inout md, what)
+        let shown = bytes.find(d, ty, 0).is_some()
+        if ty.len() > 0 && !shown {
+            bytes.append(inout md, sys.lit("\n\ntype: `"))
+            bytes.append(inout md, ty)
+            md.push(96)
+        }
+    } else {
+        md = sys.lit("```eider\n")
+        bytes.append(inout md, ty)
+        bytes.append(inout md, sys.lit("\n```"))
+    }
+    var o = sys.lit("{\"contents\":{\"kind\":\"markdown\",\"value\":")
+    json.quote_into(inout o, md)
+    bytes.append(inout o, sys.lit("},\"range\":"))
+    range_json(inout o, r, span)
+    o.push(125)
+    o
+}
+
+fn base_name(path: List[u8]) -> List[u8] {
+    match bytes.rfind_byte(path, 47) {
+        Some(i) => bytes.slice(path, i + 1, path.len())
+        None => path
+    }
+}
+
+// ---- document symbols
+
+/// LSP SymbolKind for a symbol (`variants`: a type with variants is an Enum).
+fn symbol_kind(k: u32, variants: bool) -> u64 {
+    if k == m.SK_MODULE { return 2 }
+    if k == m.SK_TYPE {
+        if variants { return 10 }
+        return 23
+    }
+    if k == m.SK_VARIANT { return 22 }
+    if k == m.SK_FIELD { return 8 }
+    if k == m.SK_FN { return 12 }
+    if k == m.SK_METHOD { return 6 }
+    if k == m.SK_CONST { return 14 }
+    if k == m.SK_TRAIT { return 11 }
+    if k == m.SK_TEST { return 24 }
+    13
+}
+
+fn outline(k: u32) -> bool { k != m.SK_PARAM && k != m.SK_LOCAL }
+
+pub fn document_symbols(r: Res) -> List[u8] uses ffi {
+    let n = r.an.symbols.len()
+    // children of each symbol (outline symbols of this file only), and which are roots
+    var first: List[u32] = List.new()
+    var next: List[u32] = List.new()
+    var last: List[u32] = List.new()
+    var has_variants: List[bool] = List.new()
+    for i in 0..n {
+        first.push(m.NONE)
+        next.push(m.NONE)
+        last.push(m.NONE)
+        has_variants.push(false)
+    }
+    var roots: List[u32] = List.new()
+    for i in 0..n {
+        let s = r.an.symbols[i]
+        if s.span.file != 0 || !outline(s.kind) { continue }
+        let c = s.container
+        let parented = c != m.NONE && (c as usize) < n && r.an.symbols[c as usize].span.file == 0 && outline(r.an.symbols[c as usize].kind)
+        if parented {
+            if s.kind == m.SK_VARIANT { has_variants[c as usize] = true }
+            if first[c as usize] == m.NONE {
+                first[c as usize] = i as u32
+            } else {
+                next[last[c as usize] as usize] = i as u32
+            }
+            last[c as usize] = i as u32
+        } else {
+            roots.push(i as u32)
+        }
+    }
+    var o = sys.lit("[")
+    for x in roots { sym_json(inout o, r, x, first, next, has_variants, 0) }
+    o.push(93)
+    o
+}
+
+fn sym_json(inout o: List[u8], r: Res, i: u32, first: List[u32], next: List[u32], variants: List[bool], depth: u32) uses ffi {
+    let s = r.an.symbols[i as usize]
+    rpc.sep(inout o)
+    o.push(123)
+    var name = s.name
+    if s.kind == m.SK_TEST {
+        name = sys.lit("test ")
+        json.quote_into(inout name, s.name)
+    }
+    rpc.kv_str(inout o, "name", name)
+    if s.detail.len() > 0 { rpc.kv_str(inout o, "detail", s.detail) }
+    rpc.kv_num(inout o, "kind", symbol_kind(s.kind, variants[i as usize]))
+    rpc.key(inout o, "range")
+    // the range must contain the selection range
+    var full = s.full
+    if full.file != s.span.file || t.pack(full.line, full.col) > t.pack(s.span.line, s.span.col) || t.pack(full.end_line, full.end_col) < t.pack(s.span.end_line, s.span.end_col) { full = s.span }
+    range_json(inout o, r, full)
+    rpc.key(inout o, "selectionRange")
+    range_json(inout o, r, s.span)
+    var c = first[i as usize]
+    if c != m.NONE && depth < 16 {
+        bytes.append(inout o, sys.lit(",\"children\":["))
+        while c != m.NONE {
+            sym_json(inout o, r, c, first, next, variants, depth + 1)
+            c = next[c as usize]
+        }
+        o.push(93)
+    }
+    o.push(125)
+}
+
+// ---- folding ranges
+
+pub fn folding(r: Res) -> List[u8] uses ffi {
+    var o = sys.lit("[")
+    for s in r.an.symbols {
+        let f = s.full
+        if f.file != 0 || f.end_line <= f.line || !outline(s.kind) { continue }
+        rpc.sep(inout o)
+        o.push(123)
+        rpc.kv_num(inout o, "startLine", (f.line - 1) as u64)
+        rpc.kv_num(inout o, "endLine", (f.end_line - 1) as u64)
+        o.push(125)
+    }
+    // runs of two or more import lines
+    var run_start: u32 = 0
+    var run_end: u32 = 0
+    for s in r.an.symbols {
+        if s.kind != m.SK_MODULE || s.full.file != 0 { continue }
+        if run_end > 0 && s.full.line == run_end + 1 {
+            run_end = s.full.line
+        } else {
+            folding_imports(inout o, run_start, run_end)
+            run_start = s.full.line
+            run_end = s.full.line
+        }
+    }
+    folding_imports(inout o, run_start, run_end)
+    o.push(93)
+    o
+}
+
+fn folding_imports(inout o: List[u8], a: u32, b: u32) uses ffi {
+    if a == 0 || b <= a { return }
+    rpc.sep(inout o)
+    o.push(123)
+    rpc.kv_num(inout o, "startLine", (a - 1) as u64)
+    rpc.kv_num(inout o, "endLine", (b - 1) as u64)
+    rpc.kv_str(inout o, "kind", sys.lit("imports"))
+    o.push(125)
+}
+
+// ---- semantic tokens
+
+/// The legend: token types and modifiers, in index order.
+pub fn legend() -> List[u8] uses ffi {
+    sys.lit("{\"tokenTypes\":[\"namespace\",\"type\",\"enumMember\",\"property\",\"function\",\"method\",\"parameter\",\"variable\",\"interface\",\"enum\"],\"tokenModifiers\":[\"declaration\",\"readonly\"]}")
+}
+
+/// The token type index for a symbol kind, or NONE (tests aren't highlighted).
+fn token_type(k: u32) -> u32 {
+    if k == m.SK_MODULE { return 0 }
+    if k == m.SK_TYPE { return 1 }
+    if k == m.SK_VARIANT { return 2 }
+    if k == m.SK_FIELD { return 3 }
+    if k == m.SK_FN { return 4 }
+    if k == m.SK_METHOD { return 5 }
+    if k == m.SK_PARAM { return 6 }
+    if k == m.SK_LOCAL || k == m.SK_CONST { return 7 }
+    if k == m.SK_TRAIT { return 8 }
+    m.NONE
+}
+
+/// Bottom-up merge sort.
+pub fn sort_u64(xs: List[u64]) -> List[u64] {
+    let n = xs.len()
+    var a = xs
+    var b = xs
+    var width: usize = 1
+    while width < n {
+        var i: usize = 0
+        while i < n {
+            let mid = if i + width < n { i + width } else { n }
+            let hi = if i + 2 * width < n { i + 2 * width } else { n }
+            var x = i
+            var y = mid
+            var k = i
+            while k < hi {
+                if x < mid && (y >= hi || a[x] <= a[y]) {
+                    b[k] = a[x]
+                    x += 1
+                } else {
+                    b[k] = a[y]
+                    y += 1
+                }
+                k += 1
+            }
+            i = hi
+        }
+        let tmp = a
+        a = b
+        b = tmp
+        width = width * 2
+    }
+    a
+}
+
+pub fn semantic_tokens(r: Res) -> List[u8] uses ffi {
+    if r.texts.len() == 0 { return sys.lit("{\"data\":[]}") }
+    // candidates: (span, type, modifiers) packed for sorting by position
+    var spans: List[m.Span] = List.new()
+    var kinds: List[u32] = List.new()
+    var keys: List[u64] = List.new()
+    for s in r.an.symbols {
+        if s.span.file != 0 || s.span.line != s.span.end_line { continue }
+        let tt = token_type(s.kind)
+        if tt == m.NONE { continue }
+        var mods: u32 = 1
+        if s.kind == m.SK_CONST { mods = 3 }
+        add_token(inout spans, inout kinds, inout keys, s.span, tt * 4 + mods)
+    }
+    for x in r.an.refs {
+        if x.span.file != 0 || x.span.line != x.span.end_line || (x.target as usize) >= r.an.symbols.len() { continue }
+        let k = r.an.symbols[x.target as usize].kind
+        let tt = token_type(k)
+        if tt == m.NONE { continue }
+        let mods: u32 = if k == m.SK_CONST { 2 } else { 0 }
+        add_token(inout spans, inout kinds, inout keys, x.span, tt * 4 + mods)
+    }
+    let sorted = sort_u64(keys)
+    let text = r.texts[0]
+    let starts = r.starts[0]
+    var o = sys.lit("{\"data\":[")
+    var prev_line: u32 = 0
+    var prev_ch: u32 = 0
+    var prev_key: u64 = 0
+    var any = false
+    for key in sorted {
+        let pos_key = key / 1048576
+        if any && pos_key == prev_key { continue }
+        let idx = (key % 1048576) as usize
+        let sp = spans[idx]
+        let a = t.offset_of(text, starts, sp.line, sp.col)
+        let b = t.offset_of(text, starts, sp.end_line, sp.end_col)
+        if b <= a { continue }
+        let start = t.pos_of_offset(text, starts, a)
+        let len = t.units_between(text, a, b)
+        let dl = start.line - prev_line
+        let dc = if dl == 0 { start.ch - prev_ch } else { start.ch }
+        if any { o.push(44) }
+        bytes.append(inout o, rpc.num(dl as u64))
+        o.push(44)
+        bytes.append(inout o, rpc.num(dc as u64))
+        o.push(44)
+        bytes.append(inout o, rpc.num(len as u64))
+        o.push(44)
+        bytes.append(inout o, rpc.num((kinds[idx] / 4) as u64))
+        o.push(44)
+        bytes.append(inout o, rpc.num((kinds[idx] % 4) as u64))
+        prev_line = start.line
+        prev_ch = start.ch
+        prev_key = pos_key
+        any = true
+    }
+    bytes.append(inout o, sys.lit("]}"))
+    o
+}
+
+fn add_token(inout spans: List[m.Span], inout kinds: List[u32], inout keys: List[u64], s: m.Span, k: u32) {
+    if spans.len() >= 1048575 { return }
+    let idx = spans.len() as u64
+    spans.push(s)
+    kinds.push(k)
+    keys.push(((s.line as u64) * 1048576 + (s.col as u64)) * 1048576 + idx)
+}
+
+// ---- completion
+
+fn completion_kind(k: u32) -> u64 {
+    if k == m.SK_MODULE { return 9 }
+    if k == m.SK_TYPE { return 22 }
+    if k == m.SK_VARIANT { return 20 }
+    if k == m.SK_FIELD { return 5 }
+    if k == m.SK_FN { return 3 }
+    if k == m.SK_METHOD { return 2 }
+    if k == m.SK_CONST { return 21 }
+    if k == m.SK_TRAIT { return 8 }
+    6
+}
+
+fn item_json(inout o: List[u8], label: List[u8], kind: u64, detail: List[u8]) uses ffi {
+    rpc.sep(inout o)
+    o.push(123)
+    rpc.kv_str(inout o, "label", label)
+    rpc.kv_num(inout o, "kind", kind)
+    if detail.len() > 0 { rpc.kv_str(inout o, "detail", detail) }
+    o.push(125)
+}
+
+fn contains_name(xs: List[List[u8]], x: List[u8]) -> bool {
+    for y in xs {
+        if bytes.eq(y, x) { return true }
+    }
+    false
+}
+
+/// Completion at `p` in the document's current `text` (which may be newer than the
+/// analysis: the receiver before a `.` is looked up by name).
+pub fn completion(r: Res, text: List[u8], starts: List[u32], p: t.Pos) -> List[u8] uses ffi {
+    let off = t.offset_of_pos(text, starts, p)
+    // the identifier prefix being typed
+    var a = off
+    while a > 0 && bytes.is_ident(text[a - 1]) { a -= 1 }
+    let prefix = bytes.slice(text, a, off)
+    var o = sys.lit("{\"isIncomplete\":false,\"items\":[")
+    var seen: List[List[u8]] = List.new()
+    if a > 0 && text[a - 1] == 46 {
+        // `recv.`: the receiver's name
+        var b = a - 1
+        while b > 0 && bytes.is_ident(text[b - 1]) { b -= 1 }
+        let recv = bytes.slice(text, b, a - 1)
+        members(inout o, inout seen, r, recv, prefix, (t.pos_of_offset(text, starts, b)).line + 1)
+    } else {
+        visible(inout o, inout seen, r, prefix, p.line + 1)
+        for k in keywords() {
+            if bytes.starts_with(k, prefix) && !contains_name(seen, k) { item_json(inout o, k, 14, List.new()) }
+        }
+    }
+    bytes.append(inout o, sys.lit("]}"))
+    o
+}
+
+fn keywords() -> List[List[u8]] uses ffi {
+    var out: List[List[u8]] = List.new()
+    for w in ["fn", "type", "let", "var", "if", "else", "while", "for", "in", "return", "match", "true", "false", "uses", "test",
+        "assert", "inout", "as", "const", "break", "continue", "import", "trait", "impl", "pub", "comptime", "extern", "export", "unsafe",
+        "self", "Self", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "usize", "bool", "str", "String", "List", "Map", "Box",
+        "Option", "Result", "Some", "None", "Ok", "Err", "print", "panic", "len", "spawn", "Task", "Mutex", "Chan"] { out.push(sys.lit(w)) }
+    out
+}
+
+/// Names visible at line `line` of the document: its items, the imported modules' aliases,
+/// and the parameters and locals of the function around the line declared before it.
+fn visible(inout o: List[u8], inout seen: List[List[u8]], r: Res, prefix: List[u8], line: u32) uses ffi {
+    // the innermost function (or test) whose full span holds the line
+    var cur = m.NONE
+    for i in 0..r.an.symbols.len() {
+        let s = r.an.symbols[i]
+        if s.full.file == 0 && (s.kind == m.SK_FN || s.kind == m.SK_METHOD || s.kind == m.SK_TEST) && s.full.line <= line && line <= s.full.end_line { cur = i as u32 }
+    }
+    // locals first (newest first, so the innermost shadowing one wins)
+    var i = r.an.symbols.len()
+    while i > 0 {
+        i -= 1
+        let s = r.an.symbols[i]
+        if s.span.file != 0 || (s.kind != m.SK_LOCAL && s.kind != m.SK_PARAM) { continue }
+        if cur == m.NONE || s.container != cur || s.span.line > line { continue }
+        if bytes.starts_with(s.name, prefix) && !contains_name(seen, s.name) {
+            seen.push(s.name)
+            item_json(inout o, s.name, 6, s.detail)
+        }
+    }
+    for s in r.an.symbols {
+        if s.span.file != 0 { continue }
+        let item = s.kind == m.SK_MODULE || s.kind == m.SK_TYPE || s.kind == m.SK_VARIANT || s.kind == m.SK_FN || s.kind == m.SK_CONST || s.kind == m.SK_TRAIT
+        if !item { continue }
+        if bytes.starts_with(s.name, prefix) && !contains_name(seen, s.name) {
+            seen.push(s.name)
+            item_json(inout o, s.name, completion_kind(s.kind), s.detail)
+        }
+    }
+}
+
+/// Members after `recv.`: a module's public items, or the fields and methods of recv's
+/// type (by the declared type of the local, parameter, field or constant named recv), or
+/// the built-in methods of List, String, Map, Option and Result.
+fn members(inout o: List[u8], inout seen: List[List[u8]], r: Res, recv: List[u8], prefix: List[u8], line: u32) uses ffi {
+    // a module alias
+    for s in r.an.symbols {
+        if s.kind == m.SK_MODULE && s.span.file == 0 && bytes.eq(s.name, recv) {
+            let mf = module_file(r, s)
+            for x in r.an.symbols {
+                if x.span.file != mf || mf == 0 { continue }
+                let item = x.kind == m.SK_TYPE || x.kind == m.SK_VARIANT || x.kind == m.SK_FN || x.kind == m.SK_CONST || x.kind == m.SK_TRAIT
+                if item && bytes.starts_with(x.name, prefix) && !contains_name(seen, x.name) {
+                    seen.push(x.name)
+                    item_json(inout o, x.name, completion_kind(x.kind), x.detail)
+                }
+            }
+            return
+        }
+    }
+    // the receiver's type: a type name itself (`Point.`), else the type of the nearest
+    // declaration named recv
+    var ty: List[u8] = List.new()
+    if recv.len() > 0 && recv[0] >= 65 && recv[0] <= 90 {
+        ty = recv
+    } else {
+        ty = type_of_name(r, recv, line)
+    }
+    let head = type_head(ty)
+    if head.len() == 0 { return }
+    // fields and methods whose container is a type with that name
+    for x in r.an.symbols {
+        if x.kind != m.SK_FIELD && x.kind != m.SK_METHOD { continue }
+        if x.container == m.NONE || (x.container as usize) >= r.an.symbols.len() { continue }
+        let c = r.an.symbols[x.container as usize]
+        if c.kind != m.SK_TYPE || !bytes.eq(c.name, head) { continue }
+        if bytes.starts_with(x.name, prefix) && !contains_name(seen, x.name) {
+            seen.push(x.name)
+            item_json(inout o, x.name, completion_kind(x.kind), x.detail)
+        }
+    }
+    for b in builtin_methods(head) {
+        if bytes.starts_with(b, prefix) && !contains_name(seen, b) {
+            seen.push(b)
+            item_json(inout o, b, 2, List.new())
+        }
+    }
+}
+
+/// The file an import's module symbol refers to: the analysis file whose stem is the alias
+/// is not reliable (aliases), so use the import's path from its detail.
+fn module_file(r: Res, s: m.Symbol) -> u32 {
+    // detail is `import "path" [as alias]`; match the path's last component
+    let d = s.detail
+    var a: usize = 0
+    while a < d.len() && d[a] != 34 { a += 1 }
+    var b = a + 1
+    while b < d.len() && d[b] != 34 { b += 1 }
+    if b >= d.len() { return 0 }
+    var path = bytes.slice(d, a + 1, b)
+    // `x` and `x.ei` name the same file
+    let base = base_name(path)
+    for i in 1..r.an.files.len() {
+        let f = base_name(r.an.files[i])
+        if bytes.eq(f, base) || (bytes.starts_with(f, base) && f.len() == base.len() + 3) { return i as u32 }
+    }
+    0
+}
+
+/// The declared type text of the nearest declaration or reference named `name` in this
+/// document, at or before `line` and inside the function around it.
+fn type_of_name(r: Res, name: List[u8], line: u32) -> List[u8] {
+    var best: List[u8] = List.new()
+    var best_line: u32 = 0
+    var first: u32 = 0
+    for s in r.an.symbols {
+        if s.full.file == 0 && (s.kind == m.SK_FN || s.kind == m.SK_METHOD || s.kind == m.SK_TEST) && s.full.line <= line && line <= s.full.end_line { first = s.full.line }
+    }
+    if first == 0 { return best }
+    for x in r.an.types {
+        if x.span.file != 0 || x.span.line > line || x.span.line < first || x.span.line < best_line { continue }
+        // a type recorded at a declaration or reference named `name`
+        if x.span.line == x.span.end_line && x.span.end_col - x.span.col == (name.len() as u32) {
+            if r.texts.len() > 0 {
+                let a = t.offset_of(r.texts[0], r.starts[0], x.span.line, x.span.col)
+                let w = bytes.slice(r.texts[0], a, a + name.len())
+                if bytes.eq(w, name) {
+                    best = x.text
+                    best_line = x.span.line
+                }
+            }
+        }
+    }
+    best
+}
+
+/// `List[Point]` -> `List`, `inout Point` -> `Point`, `g.Point` -> `Point`.
+fn type_head(ty: List[u8]) -> List[u8] uses ffi {
+    var i: usize = 0
+    var out: List[u8] = List.new()
+    while i < ty.len() {
+        while i < ty.len() && !bytes.is_ident(ty[i]) { i += 1 }
+        var w: List[u8] = List.new()
+        while i < ty.len() && bytes.is_ident(ty[i]) {
+            w.push(ty[i])
+            i += 1
+        }
+        if w.len() == 0 || bytes.eq(w, sys.lit("inout")) { continue }
+        // a qualified name: the last part
+        if i < ty.len() && ty[i] == 46 { continue }
+        return w
+    }
+    out
+}
+
+fn builtin_methods(head: List[u8]) -> List[List[u8]] uses ffi {
+    var out: List[List[u8]] = List.new()
+    if bytes.eq(head, sys.lit("List")) {
+        for w in ["len", "push", "pop", "contains", "is_empty", "clear", "sum", "map", "filter", "for_each", "any", "all", "fold", "new"] { out.push(sys.lit(w)) }
+    } else if bytes.eq(head, sys.lit("String")) {
+        for w in ["len", "push_str", "push", "append", "from", "from_int", "new"] { out.push(sys.lit(w)) }
+    } else if bytes.eq(head, sys.lit("Map")) {
+        for w in ["insert", "get", "remove", "contains_key", "len", "new"] { out.push(sys.lit(w)) }
+    } else if bytes.eq(head, sys.lit("Option")) {
+        for w in ["is_some", "is_none", "unwrap", "unwrap_or", "map", "and_then", "ok_or"] { out.push(sys.lit(w)) }
+    } else if bytes.eq(head, sys.lit("Result")) {
+        for w in ["is_ok", "is_err", "unwrap", "unwrap_or", "map", "map_err"] { out.push(sys.lit(w)) }
+    }
+    out
+}
+
+// ---- diagnostics and code actions
+
+/// The LSP range of a diagnostic at (line, col): the identifier there, else one character.
+fn diag_range(inout o: List[u8], r: Res, file: u32, line: u32, col: u32) uses ffi {
+    let f = file as usize
+    if f >= r.texts.len() || r.texts[f].len() == 0 {
+        range_json(inout o, r, m.Span(file, line, col, line, col + 1))
+        return
+    }
+    let text = r.texts[f]
+    let starts = r.starts[f]
+    let a = t.offset_of(text, starts, line, col)
+    var b = a
+    while b < text.len() && t.ident_byte(text[b]) {
+        b += 1
+    }
+    if b == a && a < text.len() && text[a] != 10 {
+        b = a + 1
+        while b < text.len() && text[b] >= 128 && text[b] < 192 { b += 1 }
+    }
+    bytes.append(inout o, sys.lit("{\"start\":"))
+    pos_json(inout o, t.pos_of_offset(text, starts, a))
+    bytes.append(inout o, sys.lit(",\"end\":"))
+    pos_json(inout o, t.pos_of_offset(text, starts, b))
+    o.push(125)
+}
+
+fn diag_json(inout o: List[u8], r: Res, d: m.Diag) uses ffi {
+    o.push(123)
+    rpc.key(inout o, "range")
+    diag_range(inout o, r, d.file, d.line, d.col)
+    rpc.kv_num(inout o, "severity", 1)
+    rpc.kv_str(inout o, "code", d.code)
+    rpc.kv_str(inout o, "source", sys.lit("eider"))
+    var msg = d.msg
+    if d.help.len() > 0 {
+        bytes.append(inout msg, sys.lit("\nhelp: "))
+        bytes.append(inout msg, d.help)
+    }
+    rpc.kv_str(inout o, "message", msg)
+    o.push(125)
+}
+
+/// The diagnostics of file `file` as a JSON array.
+pub fn diagnostics(r: Res, file: u32) -> List[u8] uses ffi {
+    var o = sys.lit("[")
+    for d in r.an.diags {
+        if d.file != file { continue }
+        rpc.sep(inout o)
+        diag_json(inout o, r, d)
+    }
+    o.push(93)
+    o
+}
+
+/// The files with diagnostics (as indexes).
+pub fn diag_files(r: Res) -> List[u32] {
+    var out: List[u32] = List.new()
+    for d in r.an.diags {
+        var dup = false
+        for f in out {
+            if f == d.file { dup = true }
+        }
+        if !dup { out.push(d.file) }
+    }
+    out
+}
+
+/// Quick fixes: every diagnostic of the document with a machine-applicable fix whose line
+/// is in [first_line, last_line] (0-based LSP lines).
+pub fn code_actions(r: Res, first_line: u32, last_line: u32) -> List[u8] uses ffi {
+    var o = sys.lit("[")
+    if r.texts.len() == 0 { return sys.lit("[]") }
+    let text = r.texts[0]
+    let starts = r.starts[0]
+    for d in r.an.diags {
+        if d.file != 0 { continue }
+        let f = match d.fix {
+            Some(x) => x
+            None => { continue }
+        }
+        let dl: u32 = if d.line > 0 { d.line - 1 } else { 0 }
+        let fl: u32 = if f.line > 0 { f.line - 1 } else { 0 }
+        let near = (dl >= first_line && dl <= last_line) || (fl >= first_line && fl <= last_line)
+        if !near { continue }
+        let a = t.offset_of(text, starts, f.line, f.col)
+        var b = a + (f.delete as usize)
+        if f.delete > (text.len() as u64) || b > text.len() { b = text.len() }
+        rpc.sep(inout o)
+        o.push(123)
+        var title = sys.lit("Apply the compiler's fix: ")
+        if f.insert.len() > 0 && b == a {
+            bytes.append(inout title, sys.lit("insert `"))
+            bytes.append(inout title, bytes.trim(f.insert))
+            title.push(96)
+        } else if f.insert.len() == 0 {
+            bytes.append(inout title, sys.lit("delete `"))
+            bytes.append(inout title, bytes.slice(text, a, b))
+            title.push(96)
+        } else {
+            bytes.append(inout title, sys.lit("replace `"))
+            bytes.append(inout title, bytes.slice(text, a, b))
+            bytes.append(inout title, sys.lit("` with `"))
+            bytes.append(inout title, f.insert)
+            title.push(96)
+        }
+        rpc.kv_str(inout o, "title", title)
+        rpc.kv_str(inout o, "kind", sys.lit("quickfix"))
+        rpc.kv_raw(inout o, "isPreferred", sys.lit("true"))
+        rpc.key(inout o, "diagnostics")
+        o.push(91)
+        diag_json(inout o, r, d)
+        o.push(93)
+        rpc.key(inout o, "edit")
+        bytes.append(inout o, sys.lit("{\"changes\":{"))
+        json.quote_into(inout o, r.uri)
+        bytes.append(inout o, sys.lit(":[{\"range\":{\"start\":"))
+        pos_json(inout o, t.pos_of_offset(text, starts, a))
+        bytes.append(inout o, sys.lit(",\"end\":"))
+        pos_json(inout o, t.pos_of_offset(text, starts, b))
+        bytes.append(inout o, sys.lit("},\"newText\":"))
+        json.quote_into(inout o, f.insert)
+        bytes.append(inout o, sys.lit("}]}}"))
+        o.push(125)
+    }
+    o.push(93)
+    o
+}

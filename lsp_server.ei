@@ -1,0 +1,495 @@
+// lsp_server: the server's state and the handling of one message.
+//
+// Documents are kept in memory (full text sync) and passed to the analysis as overlays.
+// Analysis is per document: the document is the entry file. A change marks the document
+// dirty; dirty documents are analysed (and their diagnostics published) when the input queue
+// is empty (`flush`, called by the main loop: a burst of changes costs one analysis) or when
+// a request needs the document's analysis. With `sync` (tests) a document is analysed right
+// after every open, change and save, so output order doesn't depend on timing.
+
+import "deps/core/sys.ei"
+import "deps/std/bytes.ei"
+import "deps/std/fs.ei"
+import "deps/std/io.ei"
+import "deps/json/json.ei"
+import "lsp_model.ei" as m
+import "lsp_text.ei" as t
+import "lsp_rpc.ei" as rpc
+import "lsp_features.ei" as feat
+import "lsp_analysis.ei" as analysis
+
+pub type Doc = { uri: List[u8], path: List[u8], version: i64, text: List[u8], starts: List[u32], dirty: bool, root: List[u8] }
+
+/// The last analysis of a document (same index as `S.docs`) and the documents it published
+/// diagnostics for.
+pub type Slot = { has: bool, res: feat.Res, published: List[List[u8]] }
+
+pub type S = {
+    docs: List[Doc],
+    slots: List[Slot],
+    initialized: bool,
+    shutdown: bool,
+    sync: bool,
+    verbose: bool,
+    roots: List[List[u8]],
+    exit_code: i32,
+    exiting: bool,
+    analyses: u64,
+}
+
+pub fn new_state(sync: bool, verbose: bool) -> S {
+    S(List.new(), List.new(), false, false, sync, verbose, List.new(), 0, false, 0)
+}
+
+const NONE: u32 = 4294967295
+
+// ---- reading requests
+
+fn g(d: json.Doc, id: u32, k: str) -> u32 uses ffi {
+    match json.field(d, id, k) {
+        Some(x) => x
+        None => NONE
+    }
+}
+
+fn gs(d: json.Doc, id: u32, k: str) -> List[u8] uses ffi {
+    match json.as_str(d, g(d, id, k)) {
+        Some(x) => x
+        None => List.new()
+    }
+}
+
+fn gi(d: json.Doc, id: u32, k: str) -> i64 uses ffi {
+    match json.as_int(d, g(d, id, k)) {
+        Some(x) => x
+        None => -1
+    }
+}
+
+fn clamp_u32(x: i64) -> u32 {
+    if x < 0 { return 0 }
+    if x > 2147483647 { return 2147483647 }
+    x as u32
+}
+
+fn pos_param(d: json.Doc, params: u32) -> t.Pos uses ffi {
+    let p = g(d, params, "position")
+    t.Pos(clamp_u32(gi(d, p, "line")), clamp_u32(gi(d, p, "character")))
+}
+
+fn uri_param(d: json.Doc, params: u32) -> List[u8] uses ffi { gs(d, g(d, params, "textDocument"), "uri") }
+
+fn is(a: List[u8], s: str) -> bool uses ffi { bytes.eq(a, sys.lit(s)) }
+
+// ---- documents
+
+fn find_doc(s: S, uri: List[u8]) -> u32 {
+    for i in 0..s.docs.len() {
+        if bytes.eq(s.docs[i].uri, uri) { return i as u32 }
+    }
+    NONE
+}
+
+/// The nearest directory at or above `dir` holding an eider.toml (the package root), else
+/// the workspace root that contains the file, else the file's directory.
+fn package_root(s: S, path: List[u8]) -> List[u8] uses fs, ffi {
+    var dir = t.dir_of(path)
+    while dir.len() > 0 {
+        var toml = dir
+        if !bytes.ends_with(toml, sys.lit("/")) { toml.push(47) }
+        bytes.append(inout toml, sys.lit("eider.toml"))
+        if fs.exists(toml) { return dir }
+        if bytes.eq(dir, sys.lit("/")) { break }
+        dir = t.dir_of(dir)
+    }
+    for r in s.roots {
+        if bytes.starts_with(path, r) { return r }
+    }
+    t.dir_of(path)
+}
+
+fn open_doc(inout s: S, uri: List[u8], version: i64, text: List[u8]) uses io, fs, ffi {
+    let path = t.uri_to_path(uri)
+    let root = package_root(s, path)
+    let i = find_doc(s, uri)
+    let doc = Doc(uri, path, version, text, t.line_starts(text), true, root)
+    if i == NONE {
+        s.docs.push(doc)
+        s.slots.push(Slot(false, empty_res(), List.new()))
+        if s.verbose {
+            var l = sys.lit("opened ")
+            bytes.append(inout l, path)
+            bytes.append(inout l, sys.lit(" (package root "))
+            bytes.append(inout l, root)
+            l.push(41)
+            rpc.log(l)
+        }
+    } else {
+        s.docs[i as usize] = doc
+    }
+}
+
+fn empty_res() -> feat.Res { feat.Res(m.empty(), List.new(), List.new(), List.new(), 0) }
+
+/// Analyse document i now and publish its diagnostics.
+pub fn analyze_doc(inout s: S, i: u32) uses io, fs, net, clock, ffi {
+    let doc = s.docs[i as usize]
+    var paths: List[List[u8]] = List.new()
+    var texts: List[List[u8]] = List.new()
+    for d in s.docs {
+        paths.push(d.path)
+        texts.push(d.text)
+    }
+    let t0 = now_ms()
+    let an = analysis.analyze(doc.path, paths, texts)
+    s.analyses += 1
+    // the texts the analysis saw, for position conversion
+    var ftexts: List[List[u8]] = List.new()
+    var fstarts: List[List[u32]] = List.new()
+    for k in 0..an.files.len() {
+        var tx: List[u8] = List.new()
+        if k == 0 {
+            tx = doc.text
+        } else {
+            var found = false
+            for d in s.docs {
+                if bytes.eq(d.path, an.files[k]) {
+                    tx = d.text
+                    found = true
+                }
+            }
+            if !found {
+                tx = match fs.read(an.files[k]) {
+                    Ok(x) => x
+                    Err(_) => List.new()
+                }
+            }
+        }
+        fstarts.push(t.line_starts(tx))
+        ftexts.push(tx)
+    }
+    let res = feat.Res(an, ftexts, fstarts, doc.uri, doc.version)
+    var d2 = doc
+    d2.dirty = false
+    s.docs[i as usize] = d2
+    let old = s.slots[i as usize].published
+    let published = publish(res, old)
+    s.slots[i as usize] = Slot(true, res, published)
+    if s.verbose {
+        var l = sys.lit("analysed ")
+        bytes.append(inout l, doc.path)
+        bytes.append(inout l, sys.lit(" in "))
+        bytes.append(inout l, bytes.from_u64(now_ms() - t0))
+        bytes.append(inout l, sys.lit(" ms"))
+        rpc.log(l)
+    }
+}
+
+/// Publish the diagnostics of `res` per file, and empty lists for files that had some
+/// before but have none now. Returns the URIs published with diagnostics.
+fn publish(res: feat.Res, old: List[List[u8]]) -> List[List[u8]] uses io, ffi {
+    var now: List[List[u8]] = List.new()
+    // the document itself always gets a (possibly empty) list
+    var files = feat.diag_files(res)
+    var has0 = false
+    for f in files {
+        if f == 0 { has0 = true }
+    }
+    if !has0 { files.push(0) }
+    for f in files {
+        let uri = feat.uri_of(res, f)
+        var p = sys.lit("{\"uri\":")
+        json.quote_into(inout p, uri)
+        if f == 0 {
+            bytes.append(inout p, sys.lit(",\"version\":"))
+            bytes.append(inout p, bytes.from_i64(res.version))
+        }
+        bytes.append(inout p, sys.lit(",\"diagnostics\":"))
+        bytes.append(inout p, feat.diagnostics(res, f))
+        p.push(125)
+        rpc.send(rpc.notification("textDocument/publishDiagnostics", p))
+        if f != 0 { now.push(uri) }
+    }
+    for u in old {
+        var still = false
+        for x in now {
+            if bytes.eq(x, u) { still = true }
+        }
+        if !still {
+            var p = sys.lit("{\"uri\":")
+            json.quote_into(inout p, u)
+            bytes.append(inout p, sys.lit(",\"diagnostics\":[]}"))
+            rpc.send(rpc.notification("textDocument/publishDiagnostics", p))
+        }
+    }
+    now
+}
+
+/// Analyse every dirty document (the input queue is empty).
+pub fn flush(inout s: S) uses io, fs, net, clock, ffi {
+    for i in 0..s.docs.len() {
+        if s.docs[i].dirty { analyze_doc(inout s, i as u32) }
+    }
+}
+
+pub fn has_dirty(s: S) -> bool {
+    for d in s.docs {
+        if d.dirty { return true }
+    }
+    false
+}
+
+/// The analysis of document `uri`, analysing it first if it is dirty; None if not open.
+fn res_for(inout s: S, uri: List[u8]) -> Option[feat.Res] uses io, fs, net, clock, ffi {
+    let i = find_doc(s, uri)
+    if i == NONE { return None }
+    if s.docs[i as usize].dirty || !s.slots[i as usize].has { analyze_doc(inout s, i) }
+    Some(s.slots[i as usize].res)
+}
+
+// ---- messages
+
+/// Handle one message body.
+pub fn handle(inout s: S, body: List[u8]) uses io, fs, net, clock, ffi {
+    let d = match json.parse(body) {
+        Ok(x) => x
+        Err(e) => {
+            var m2 = sys.lit("parse error: ")
+            bytes.append(inout m2, json.error_text(e))
+            rpc.log(m2)
+            rpc.send(rpc.error(sys.lit("null"), rpc.PARSE_ERROR, m2))
+            return
+        }
+    }
+    let root = d.root
+    if json.kind(d, root) != json.OBJECT {
+        rpc.log_s("invalid request: not an object")
+        rpc.send(rpc.error(sys.lit("null"), rpc.INVALID_REQUEST, sys.lit("a message must be a JSON object")))
+        return
+    }
+    let idn = g(d, root, "id")
+    let has_id = idn != NONE && (json.kind(d, idn) == json.NUMBER || json.kind(d, idn) == json.STRING)
+    let id = if has_id { json.write(d, idn) } else { sys.lit("null") }
+    let mn = g(d, root, "method")
+    if mn == NONE {
+        // a response to a request of ours (we send none) or garbage
+        if !has_id { rpc.log_s("invalid message: no method and no id") }
+        return
+    }
+    let method = match json.as_str(d, mn) {
+        Some(x) => x
+        None => {
+            rpc.log_s("invalid request: `method` is not a string")
+            if has_id || idn == NONE { rpc.send(rpc.error(id, rpc.INVALID_REQUEST, sys.lit("`method` must be a string"))) }
+            return
+        }
+    }
+    let params = g(d, root, "params")
+    if is(method, "exit") {
+        s.exiting = true
+        s.exit_code = if s.shutdown { 0 } else { 1 }
+        return
+    }
+    if !s.initialized && !is(method, "initialize") {
+        if has_id { rpc.send(rpc.error(id, rpc.SERVER_NOT_INITIALIZED, sys.lit("the server is not initialized"))) }
+        return
+    }
+    if s.shutdown && has_id {
+        rpc.send(rpc.error(id, rpc.INVALID_REQUEST, sys.lit("the server is shutting down")))
+        return
+    }
+    if !has_id {
+        notification(inout s, method, d, params)
+        return
+    }
+    let t0 = now_ms()
+    let reply = request(inout s, method, d, params, id)
+    rpc.send(reply)
+    if s.verbose {
+        var l = method
+        l.push(32)
+        bytes.append(inout l, bytes.from_u64(now_ms() - t0))
+        bytes.append(inout l, sys.lit(" ms, "))
+        bytes.append(inout l, bytes.from_u64(reply.len() as u64))
+        bytes.append(inout l, sys.lit(" bytes"))
+        rpc.log(l)
+    }
+}
+
+fn notification(inout s: S, method: List[u8], d: json.Doc, params: u32) uses io, fs, net, clock, ffi {
+    if is(method, "initialized") { return }
+    if is(method, "textDocument/didOpen") {
+        let td = g(d, params, "textDocument")
+        let uri = gs(d, td, "uri")
+        let tx = g(d, td, "text")
+        if uri.len() == 0 || json.kind(d, tx) != json.STRING {
+            rpc.log_s("didOpen without a uri or text: ignored")
+            return
+        }
+        open_doc(inout s, uri, gi(d, td, "version"), json.as_str(d, tx).unwrap_or(List.new()))
+        let opened = find_doc(s, uri)
+        if s.sync { analyze_doc(inout s, opened) }
+        return
+    }
+    if is(method, "textDocument/didChange") {
+        let uri = uri_param(d, params)
+        let i = find_doc(s, uri)
+        if i == NONE {
+            rpc.log_s("didChange for a document that isn't open: ignored")
+            return
+        }
+        // full sync: the last change's text is the document (a ranged change is applied)
+        let changes = g(d, params, "contentChanges")
+        var doc = s.docs[i as usize]
+        for k in 0..json.len(d, changes) {
+            let c = json.at(d, changes, k).unwrap_or(NONE)
+            let tx = json.as_str(d, g(d, c, "text")).unwrap_or(List.new())
+            let rg = g(d, c, "range")
+            if rg == NONE {
+                doc.text = tx
+            } else {
+                let a = t.offset_of_pos(doc.text, doc.starts, range_pos(d, rg, "start"))
+                let b = t.offset_of_pos(doc.text, doc.starts, range_pos(d, rg, "end"))
+                var nt = bytes.slice(doc.text, 0, a)
+                bytes.append(inout nt, tx)
+                let from = if b > a { b } else { a }
+                bytes.append(inout nt, bytes.slice(doc.text, from, doc.text.len()))
+                doc.text = nt
+            }
+            doc.starts = t.line_starts(doc.text)
+        }
+        doc.version = gi(d, g(d, params, "textDocument"), "version")
+        doc.dirty = true
+        s.docs[i as usize] = doc
+        if s.sync { analyze_doc(inout s, i) }
+        return
+    }
+    if is(method, "textDocument/didSave") {
+        // a saved file can change what its importers see: re-analyse every open document
+        let uri = uri_param(d, params)
+        for k in 0..s.docs.len() {
+            var doc = s.docs[k]
+            doc.dirty = true
+            s.docs[k] = doc
+        }
+        if s.sync {
+            let i = find_doc(s, uri)
+            if i != NONE { analyze_doc(inout s, i) }
+        }
+        return
+    }
+    if is(method, "textDocument/didClose") {
+        let uri = uri_param(d, params)
+        let i = find_doc(s, uri)
+        if i == NONE { return }
+        // clear what the document published
+        let slot = s.slots[i as usize]
+        var all = slot.published
+        all.push(uri)
+        for u in all {
+            var p = sys.lit("{\"uri\":")
+            json.quote_into(inout p, u)
+            bytes.append(inout p, sys.lit(",\"diagnostics\":[]}"))
+            rpc.send(rpc.notification("textDocument/publishDiagnostics", p))
+        }
+        var docs: List[Doc] = List.new()
+        var slots: List[Slot] = List.new()
+        for k in 0..s.docs.len() {
+            if k != (i as usize) {
+                docs.push(s.docs[k])
+                slots.push(s.slots[k])
+            }
+        }
+        s.docs = docs
+        s.slots = slots
+        return
+    }
+    // $/cancelRequest, $/setTrace, workspace/didChangeConfiguration, ...: nothing to do
+}
+
+fn range_pos(d: json.Doc, rg: u32, k: str) -> t.Pos uses ffi {
+    let p = g(d, rg, k)
+    t.Pos(clamp_u32(gi(d, p, "line")), clamp_u32(gi(d, p, "character")))
+}
+
+fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8]) -> List[u8] uses io, fs, net, clock, ffi {
+    if is(method, "initialize") {
+        if s.initialized { return rpc.error(id, rpc.INVALID_REQUEST, sys.lit("initialize was already called")) }
+        s.initialized = true
+        roots_from(inout s, d, params)
+        return rpc.result(id, capabilities())
+    }
+    if is(method, "shutdown") {
+        s.shutdown = true
+        return rpc.result(id, sys.lit("null"))
+    }
+    let uri = uri_param(d, params)
+    let is_doc_request = bytes.starts_with(method, sys.lit("textDocument/"))
+    if !is_doc_request { return rpc.error(id, rpc.METHOD_NOT_FOUND, unknown(method)) }
+    let known = is(method, "textDocument/hover") || is(method, "textDocument/definition") || is(method, "textDocument/references") || is(method, "textDocument/documentSymbol") || is(method, "textDocument/foldingRange") || is(method, "textDocument/semanticTokens/full") || is(method, "textDocument/completion") || is(method, "textDocument/codeAction")
+    if !known { return rpc.error(id, rpc.METHOD_NOT_FOUND, unknown(method)) }
+    if uri.len() == 0 { return rpc.error(id, rpc.INVALID_PARAMS, sys.lit("missing params.textDocument.uri")) }
+    let res = match res_for(inout s, uri) {
+        Some(r) => r
+        None => {
+            // not open: answer emptily rather than reading the disk behind the client's back
+            let empty = if is(method, "textDocument/hover") || is(method, "textDocument/definition") || is(method, "textDocument/references") { sys.lit("null") } else { sys.lit("[]") }
+            if is(method, "textDocument/semanticTokens/full") { return rpc.result(id, sys.lit("{\"data\":[]}")) }
+            if is(method, "textDocument/completion") { return rpc.result(id, sys.lit("{\"isIncomplete\":false,\"items\":[]}")) }
+            return rpc.result(id, empty)
+        }
+    }
+    if is(method, "textDocument/hover") { return rpc.result(id, feat.hover(res, pos_param(d, params))) }
+    if is(method, "textDocument/definition") { return rpc.result(id, feat.definition(res, pos_param(d, params))) }
+    if is(method, "textDocument/references") {
+        let inc = json.as_bool(d, g(d, g(d, params, "context"), "includeDeclaration")).unwrap_or(false)
+        return rpc.result(id, feat.references(res, pos_param(d, params), inc))
+    }
+    if is(method, "textDocument/documentSymbol") { return rpc.result(id, feat.document_symbols(res)) }
+    if is(method, "textDocument/foldingRange") { return rpc.result(id, feat.folding(res)) }
+    if is(method, "textDocument/semanticTokens/full") { return rpc.result(id, feat.semantic_tokens(res)) }
+    if is(method, "textDocument/completion") {
+        let i = find_doc(s, uri)
+        let doc = s.docs[i as usize]
+        return rpc.result(id, feat.completion(res, doc.text, doc.starts, pos_param(d, params)))
+    }
+    // textDocument/codeAction
+    let rg = g(d, params, "range")
+    let a = range_pos(d, rg, "start")
+    let b = range_pos(d, rg, "end")
+    rpc.result(id, feat.code_actions(res, a.line, b.line))
+}
+
+fn unknown(method: List[u8]) -> List[u8] uses ffi {
+    var m2 = sys.lit("unknown method ")
+    bytes.append(inout m2, method)
+    m2
+}
+
+fn roots_from(inout s: S, d: json.Doc, params: u32) uses ffi {
+    let folders = g(d, params, "workspaceFolders")
+    for k in 0..json.len(d, folders) {
+        let f = json.at(d, folders, k).unwrap_or(NONE)
+        let u = gs(d, f, "uri")
+        if u.len() > 0 { s.roots.push(t.uri_to_path(u)) }
+    }
+    let ru = gs(d, params, "rootUri")
+    if ru.len() > 0 && s.roots.len() == 0 { s.roots.push(t.uri_to_path(ru)) }
+    let rp = gs(d, params, "rootPath")
+    if rp.len() > 0 && s.roots.len() == 0 { s.roots.push(rp) }
+}
+
+fn capabilities() -> List[u8] uses ffi {
+    var o = sys.lit("{\"capabilities\":{")
+    bytes.append(inout o, sys.lit("\"positionEncoding\":\"utf-16\","))
+    bytes.append(inout o, sys.lit("\"textDocumentSync\":{\"openClose\":true,\"change\":1,\"save\":{\"includeText\":false}},"))
+    bytes.append(inout o, sys.lit("\"hoverProvider\":true,\"definitionProvider\":true,\"referencesProvider\":true,"))
+    bytes.append(inout o, sys.lit("\"documentSymbolProvider\":true,\"foldingRangeProvider\":true,"))
+    bytes.append(inout o, sys.lit("\"codeActionProvider\":{\"codeActionKinds\":[\"quickfix\"]},"))
+    bytes.append(inout o, sys.lit("\"completionProvider\":{\"triggerCharacters\":[\".\"]},"))
+    bytes.append(inout o, sys.lit("\"semanticTokensProvider\":{\"legend\":"))
+    bytes.append(inout o, feat.legend())
+    bytes.append(inout o, sys.lit(",\"full\":true}"))
+    bytes.append(inout o, sys.lit("},\"serverInfo\":{\"name\":\"eider-analyzer\",\"version\":\"0.1.0\"}}"))
+    o
+}

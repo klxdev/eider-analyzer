@@ -1,0 +1,251 @@
+// eider-analyzer: a language server for Eider (LSP 3.17 over stdio), written in Eider.
+//
+//   eider-analyzer [--sync] [--verbose]   serve LSP on stdin/stdout (logs go to stderr)
+//   eider-analyzer --dump <file.ei>       print the analysis of a file (for debugging)
+//   eider-analyzer --version | --help
+//
+// Two threads: a reader turns stdin into message bodies (lsp_rpc.ei's framing) and sends
+// them over a channel, counting what it has queued; the main thread handles one message at
+// a time (lsp_server.ei) and analyses changed documents once the queue is empty, so a burst
+// of edits costs one analysis (the debounce). `--sync` analyses after every change instead,
+// which makes the output order independent of timing (the tests use it). The C core's
+// buffers are per thread, so the reader's reads and the main thread's writes don't mix.
+//
+// Architecture: lsp_rpc (framing, JSON-RPC output), lsp_server (state, documents,
+// dispatch, publishing), lsp_features (results from an analysis), lsp_text (UTF-16 and
+// URIs), lsp_model (the analysis data), lsp_analysis (the only module that touches the
+// compiler), lsp_standin (its temporary lexical symbols).
+
+import "deps/core/sys.ei"
+import "deps/std/bytes.ei"
+import "deps/std/io.ei"
+import "deps/std/env.ei"
+import "lsp_model.ei" as m
+import "lsp_rpc.ei" as rpc
+import "lsp_server.ei" as server
+import "lsp_analysis.ei" as analysis
+
+fn is(a: List[u8], s: str) -> bool uses ffi { bytes.eq(a, sys.lit(s)) }
+
+/// The reader thread: stdin -> message bodies on `c`; `pending` counts bodies sent but not
+/// yet taken. Malformed input is sent as a NUL byte and the log line (a body can't start
+/// with NUL: it would not be JSON either way). Closes `c` at end of input.
+fn reader(c: Chan[List[u8]], pending: Mutex[i64]) -> i32 uses io, ffi {
+    var f = rpc.framer()
+    var going = true
+    while going {
+        let chunk: List[u8] = match io.read(1048576) {
+            Ok(b) => b
+            Err(_) => {
+                rpc.log_s("cannot read stdin")
+                let nothing: List[u8] = List.new()
+                nothing
+            }
+        }
+        if chunk.len() == 0 {
+            going = false
+        } else {
+            rpc.feed(inout f, chunk)
+            var more = true
+            while more {
+                match rpc.next(inout f) {
+                    rpc.Body(b) => {
+                        pending.update(|x: i64| -> i64 x + 1)
+                        c.send(b)
+                    }
+                    rpc.Dropped(why) => {
+                        // reported by the main thread, so the log keeps the input's order
+                        var l: List[u8] = List.new()
+                        l.push(0)
+                        bytes.append(inout l, sys.lit("dropped malformed input: "))
+                        bytes.append(inout l, why)
+                        pending.update(|x: i64| -> i64 x + 1)
+                        c.send(l)
+                    }
+                    rpc.NeedMore => { more = false }
+                }
+            }
+        }
+    }
+    c.close()
+    0
+}
+
+fn usage() -> List[u8] uses ffi {
+    var t: List[u8] = List.new()
+    for l in [
+        "eider-analyzer 0.1.0: a language server for Eider (LSP 3.17 over stdio)",
+        "",
+        "usage:",
+        "  eider-analyzer [--sync] [--verbose]   serve on stdin/stdout; logs go to stderr",
+        "  eider-analyzer --dump <file.ei>       print the analysis of a file",
+        "  eider-analyzer --version | --help",
+        "",
+        "  --sync      analyse after every change (no debounce; deterministic output order)",
+        "  --verbose   log documents and analysis times",
+        "",
+        "environment:",
+        "  EIDER_ROOT  the Eider toolchain (the directory holding core/prelude.ei); default:",
+        "              the parent of the directory holding this binary",
+    ] {
+        bytes.append(inout t, sys.lit(l))
+        t.push(10)
+    }
+    t
+}
+
+fn main() uses io, fs, net, clock, threads, ffi {
+    let argv = env.args()
+    var sync = false
+    var verbose = false
+    var i: usize = 1
+    while i < argv.len() {
+        let a = argv[i]
+        if is(a, "--sync") {
+            sync = true
+        } else if is(a, "--verbose") || is(a, "-v") {
+            verbose = true
+        } else if is(a, "--stdio") {
+            // what some clients pass; stdio is the only transport
+        } else if is(a, "--version") {
+            io.outln(sys.lit("eider-analyzer 0.1.0"))
+            env.exit(0)
+        } else if is(a, "--help") || is(a, "-h") {
+            io.out(usage())
+            env.exit(0)
+        } else if is(a, "--dump") && i + 1 < argv.len() {
+            dump(argv[i + 1])
+            env.exit(0)
+        } else {
+            var l = sys.lit("unknown argument ")
+            bytes.append(inout l, a)
+            rpc.log(l)
+            io.err(usage())
+            env.exit(2)
+        }
+        i += 1
+    }
+    let prelude = analysis.prelude_path()
+    if prelude.len() > 0 {
+        var l = sys.lit("warning: the Eider prelude is missing at ")
+        bytes.append(inout l, prelude)
+        bytes.append(inout l, sys.lit("; set EIDER_ROOT to the eider-lang checkout (diagnostics will say E0804)"))
+        rpc.log(l)
+    }
+    let c: Chan[List[u8]] = Chan.new()
+    let pending = Mutex.new(0 as i64)
+    let cc = c
+    let pp = pending
+    let task = spawn(|| -> i32 reader(cc, pp))
+    var s = server.new_state(sync, verbose)
+    var going = true
+    while going {
+        match c.recv() {
+            Some(body) => {
+                pending.update(|x: i64| -> i64 x - 1)
+                if body.len() > 0 && body[0] == 0 {
+                    rpc.log(bytes.slice(body, 1, body.len()))
+                } else {
+                    server.handle(inout s, body)
+                }
+                if s.exiting { env.exit(s.exit_code) }
+                if !s.sync && server.has_dirty(s) && pending.get() == 0 { server.flush(inout s) }
+            }
+            None => { going = false }
+        }
+    }
+    // end of input without `exit`
+    if !s.shutdown { rpc.log_s("stdin closed without shutdown/exit") }
+    let code: i32 = if s.shutdown { 0 } else { 1 }
+    env.exit(code)
+}
+
+// ---- --dump
+
+fn num(inout o: List[u8], n: u32) { bytes.append(inout o, bytes.from_u64(n as u64)) }
+
+fn sp(inout o: List[u8], s: m.Span) {
+    num(inout o, s.file)
+    o.push(58)
+    num(inout o, s.line)
+    o.push(58)
+    num(inout o, s.col)
+    o.push(45)
+    num(inout o, s.end_line)
+    o.push(58)
+    num(inout o, s.end_col)
+}
+
+fn dump(path: List[u8]) uses io, fs, net, clock, ffi {
+    let none: List[List[u8]] = List.new()
+    let a = analysis.analyze(analysis.absolute(path), none, none)
+    var o: List[u8] = List.new()
+    for f in a.files {
+        bytes.append(inout o, sys.lit("file "))
+        bytes.append(inout o, f)
+        o.push(10)
+    }
+    for d in a.diags {
+        bytes.append(inout o, sys.lit("diag "))
+        bytes.append(inout o, d.code)
+        o.push(32)
+        num(inout o, d.file)
+        o.push(58)
+        num(inout o, d.line)
+        o.push(58)
+        num(inout o, d.col)
+        o.push(32)
+        bytes.append(inout o, d.msg)
+        if d.help.len() > 0 {
+            bytes.append(inout o, sys.lit(" | help: "))
+            bytes.append(inout o, d.help)
+        }
+        match d.fix {
+            Some(f) => {
+                bytes.append(inout o, sys.lit(" | fix at "))
+                num(inout o, f.line)
+                o.push(58)
+                num(inout o, f.col)
+                bytes.append(inout o, sys.lit(" delete "))
+                bytes.append(inout o, bytes.from_u64(f.delete))
+                bytes.append(inout o, sys.lit(" insert "))
+                bytes.append(inout o, f.insert)
+            }
+            None => {}
+        }
+        o.push(10)
+    }
+    for k in 0..a.symbols.len() {
+        let s = a.symbols[k]
+        bytes.append(inout o, sys.lit("sym "))
+        num(inout o, k as u32)
+        o.push(32)
+        bytes.append(inout o, sys.lit(m.kind_name(s.kind)))
+        o.push(32)
+        bytes.append(inout o, s.name)
+        o.push(32)
+        sp(inout o, s.span)
+        o.push(32)
+        sp(inout o, s.full)
+        bytes.append(inout o, sys.lit(" in "))
+        if s.container == m.NONE { o.push(45) } else { num(inout o, s.container) }
+        bytes.append(inout o, sys.lit(" | "))
+        bytes.append(inout o, s.detail)
+        o.push(10)
+    }
+    for r in a.refs {
+        bytes.append(inout o, sys.lit("ref "))
+        sp(inout o, r.span)
+        bytes.append(inout o, sys.lit(" -> "))
+        num(inout o, r.target)
+        o.push(10)
+    }
+    for x in a.types {
+        bytes.append(inout o, sys.lit("type "))
+        sp(inout o, x.span)
+        o.push(32)
+        bytes.append(inout o, x.text)
+        o.push(10)
+    }
+    io.out(o)
+}
