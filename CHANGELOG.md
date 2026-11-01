@@ -4,7 +4,10 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
-## Unreleased
+## 0.3.0
+
+For Eider 0.3 (`eider = "0.3"`): the language server keeps up with 0.3's language. Requires
+eider-json 0.3.0; every plain string literal in the analyzer interpolates (eider-lang U29).
 
 Default methods (eider-lang issues #45 and #75, docs/compiler.md C8.31): no false diagnostics
 for a type that inherits one, definition goes to the trait's method, and completion after
