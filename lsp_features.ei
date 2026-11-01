@@ -21,7 +21,7 @@ pub fn uri_of(r: Res, file: u32) -> List[u8] {
 }
 
 fn pos_json(inout o: List[u8], p: t.Pos) {
-    bytes.append(inout o, sys.lit("{\"line\":"))
+    bytes.append(inout o, sys.lit("{{\"line\":"))
     bytes.append(inout o, rpc.num(p.line as u64))
     bytes.append(inout o, sys.lit(",\"character\":"))
     bytes.append(inout o, rpc.num(p.ch as u64))
@@ -39,7 +39,7 @@ pub fn lsp_pos(r: Res, file: u32, line: u32, col: u32) -> t.Pos {
 }
 
 pub fn range_json(inout o: List[u8], r: Res, s: m.Span) {
-    bytes.append(inout o, sys.lit("{\"start\":"))
+    bytes.append(inout o, sys.lit("{{\"start\":"))
     pos_json(inout o, lsp_pos(r, s.file, s.line, s.col))
     bytes.append(inout o, sys.lit(",\"end\":"))
     pos_json(inout o, lsp_pos(r, s.file, s.end_line, s.end_col))
@@ -47,7 +47,7 @@ pub fn range_json(inout o: List[u8], r: Res, s: m.Span) {
 }
 
 fn location_json(inout o: List[u8], r: Res, s: m.Span) {
-    bytes.append(inout o, sys.lit("{\"uri\":"))
+    bytes.append(inout o, sys.lit("{{\"uri\":"))
     json.quote_into(inout o, uri_of(r, s.file))
     bytes.append(inout o, sys.lit(",\"range\":"))
     range_json(inout o, r, s)
@@ -221,9 +221,9 @@ pub fn hover(r: Res, p: t.Pos) -> List[u8] uses fs {
         bytes.append(inout md, ty)
         bytes.append(inout md, sys.lit("\n```"))
     }
-    let mut o = sys.lit("{\"contents\":{\"kind\":\"markdown\",\"value\":")
+    let mut o = sys.lit("{{\"contents\":{{\"kind\":\"markdown\",\"value\":")
     json.quote_into(inout o, md)
-    bytes.append(inout o, sys.lit("},\"range\":"))
+    bytes.append(inout o, sys.lit("}},\"range\":"))
     range_json(inout o, r, span)
     o.push(125)
     o
@@ -495,7 +495,7 @@ fn folding_imports(inout o: List[u8], a: u32, b: u32) {
 
 /// The legend: token types and modifiers, in index order.
 pub fn legend() -> List[u8] {
-    sys.lit("{\"tokenTypes\":[\"namespace\",\"type\",\"enumMember\",\"property\",\"function\",\"method\",\"parameter\",\"variable\",\"interface\",\"enum\"],\"tokenModifiers\":[\"declaration\",\"readonly\"]}")
+    sys.lit("{{\"tokenTypes\":[\"namespace\",\"type\",\"enumMember\",\"property\",\"function\",\"method\",\"parameter\",\"variable\",\"interface\",\"enum\"],\"tokenModifiers\":[\"declaration\",\"readonly\"]}}")
 }
 
 /// The token type index for a symbol kind, or NONE (tests aren't highlighted).
@@ -547,7 +547,7 @@ pub fn sort_u64(xs: List[u64]) -> List[u64] {
 }
 
 pub fn semantic_tokens(r: Res) -> List[u8] {
-    if r.texts.len() == 0 { return sys.lit("{\"data\":[]}") }
+    if r.texts.len() == 0 { return sys.lit("{{\"data\":[]}}") }
     // candidates: (span, type, modifiers) packed for sorting by position
     let mut spans: List[m.Span] = List.new()
     let mut kinds: List[u32] = List.new()
@@ -576,7 +576,7 @@ pub fn semantic_tokens(r: Res) -> List[u8] {
     let sorted = sort_u64(keys)
     let text = r.texts[0]
     let starts = r.starts[0]
-    let mut o = sys.lit("{\"data\":[")
+    let mut o = sys.lit("{{\"data\":[")
     let mut prev_line: u32 = 0
     let mut prev_ch: u32 = 0
     let mut prev_key: u64 = 0
@@ -608,7 +608,7 @@ pub fn semantic_tokens(r: Res) -> List[u8] {
         prev_key = pos_key
         any = true
     }
-    bytes.append(inout o, sys.lit("]}"))
+    bytes.append(inout o, sys.lit(r"]}"))
     o
 }
 
@@ -659,12 +659,12 @@ pub fn completion(r: Res, path: List[u8], text: List[u8], starts: List[u32], p: 
     let mut a = off.copy()
     while a > 0 && bytes.is_ident(text[a - 1]) { a -= 1 }
     let prefix = bytes.slice(text, a, off)
-    let mut o = sys.lit("{\"isIncomplete\":false,\"items\":[")
+    let mut o = sys.lit("{{\"isIncomplete\":false,\"items\":[")
     let mut seen: List[List[u8]] = List.new()
     let pc = path_context(text, a)
     let an = attr_context(text, a)
     if an.len() > 0 {
-        // a key of an attribute (eider-lang docs/compiler.md, "C8.30"): `@json(na|`
+        // a key of an attribute (eider-lang docs/compiler.md, "C8.40"): `@json(na|`
         attr_keys(inout o, inout seen, r, an, prefix)
     } else if pc.found {
         // a module path: after `import `, `import a.`, or in a group's `{ }`
@@ -722,7 +722,7 @@ pub fn completion(r: Res, path: List[u8], text: List[u8], starts: List[u32], p: 
             if bytes.starts_with(k, prefix) && !contains_name(seen, k) { item_json(inout o, k, 14, List.new()) }
         }
     }
-    bytes.append(inout o, sys.lit("]}"))
+    bytes.append(inout o, sys.lit(r"]}"))
     o
 }
 
@@ -877,7 +877,9 @@ fn keywords() -> List[List[u8]] {
         // since docs/compiler.md C8.4 to C8.23: `let mut`, Ref[T] and the prelude's Ordering and traits
         "mut", "Ref", "Ordering", "Less", "Equal", "Greater", "Copy", "Eq", "Ord", "Hash", "Show", "Iter", "Drop",
         "From", "Default",
-        // comptime reflection (eider-lang docs/compiler.md, "C8.31")
+        // C8.29: words at the start of a statement
+        "defer", "errdefer",
+        // comptime reflection (eider-lang docs/compiler.md, "C8.41")
         "fields", "variants", "has_attr"] { out.push(sys.lit(w)) }
     out
 }
@@ -1172,7 +1174,7 @@ fn diag_range(inout o: List[u8], r: Res, file: u32, line: u32, col: u32) {
         b = a + 1
         while b < text.len() && text[b] >= 128 && text[b] < 192 { b += 1 }
     }
-    bytes.append(inout o, sys.lit("{\"start\":"))
+    bytes.append(inout o, sys.lit("{{\"start\":"))
     pos_json(inout o, t.pos_of_offset(text, starts, a))
     bytes.append(inout o, sys.lit(",\"end\":"))
     pos_json(inout o, t.pos_of_offset(text, starts, b))
@@ -1266,15 +1268,15 @@ pub fn code_actions(r: Res, first_line: u32, last_line: u32) -> List[u8] {
         diag_json(inout o, r, d)
         o.push(93)
         rpc.key(inout o, "edit")
-        bytes.append(inout o, sys.lit("{\"changes\":{"))
+        bytes.append(inout o, sys.lit("{{\"changes\":{{"))
         json.quote_into(inout o, r.uri)
-        bytes.append(inout o, sys.lit(":[{\"range\":{\"start\":"))
+        bytes.append(inout o, sys.lit(":[{{\"range\":{{\"start\":"))
         pos_json(inout o, t.pos_of_offset(text, starts, a))
         bytes.append(inout o, sys.lit(",\"end\":"))
         pos_json(inout o, t.pos_of_offset(text, starts, b))
-        bytes.append(inout o, sys.lit("},\"newText\":"))
+        bytes.append(inout o, sys.lit("}},\"newText\":"))
         json.quote_into(inout o, f.insert)
-        bytes.append(inout o, sys.lit("}]}}"))
+        bytes.append(inout o, sys.lit(r"}]}}"))
         o.push(125)
     }
     o.push(93)

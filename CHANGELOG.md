@@ -6,12 +6,27 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 
 ## Unreleased
 
-- Attributes (eider-lang docs/compiler.md, "C8.30"): inside `@name(` and `@alias.name(`, the
+- Attributes (eider-lang docs/compiler.md, "C8.40"): inside `@name(` and `@alias.name(`, the
   keys of the attribute (the fields of the record type its `attr` declaration is) are
   completed, with their types and defaults; tests/sessions/attributes.
-- Comptime reflection (eider-lang docs/compiler.md, "C8.31"): `fields`, `variants` and
+- Comptime reflection (eider-lang docs/compiler.md, "C8.41"): `fields`, `variants` and
   `has_attr` complete as keywords; reflective generic code is analysed by the compiler like
   any other (tests/sessions/reflection).
+The pattern-matching finish (eider-lang issues #98 and #105, docs/compiler.md C8.30): a
+constant in a pattern goes to the constant, a field pattern's name is a binding, a guard sees
+the arm's bindings; no false diagnostics (tests/sessions/patterns.jsonl).
+
+`defer` and `errdefer` (eider-lang issue #15, docs/compiler.md C8.29): completion offers the
+words; diagnostics (E0309, E0310 with its quick fix) are the compiler's, and a name used in
+deferred code has one reference however many exits run it (tests/sessions/defer.jsonl).
+
+String literals (eider-lang issues #17 and #13, decision U29, docs/compiler.md C8.28): every
+plain literal interpolates (`"{x:>8}"`, `{{` for a brace), and raw strings (`r"..."`,
+`r#"..."#`, `r"""`) and multi-line `"""` strings exist. The compiler's own front end gives
+diagnostics (E0412 with its quick fix), hover, definition and references inside a literal's
+braces; the lexical stand-in reads its text as a string and the names in its braces as
+references (tests/sessions/strings.jsonl, tests/fixtures/syntax.ei). This repository's
+literals with braces are migrated (`eiderc migrate-strings`).
 
 ## 0.2.0
 

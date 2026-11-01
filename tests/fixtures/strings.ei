@@ -1,0 +1,20 @@
+// String literals (eider-lang docs/compiler.md, "C8.28"; tests/sessions/strings.jsonl): the
+// names inside a literal's braces are references like any other, and a raw or multi-line
+// string is just a str.
+type Item = { name: str, count: u32 }
+
+fn label(it: Item) -> String {
+    let width: u32 = 8
+    "{it.name:>8} x{it.count} ({width})"
+}
+
+fn main() uses io {
+    let it = Item(r"C:\tmp", 3)
+    let banner = """
+        Items:
+          one
+        """
+    print(banner)
+    print(label(it))
+    print("{it.name:x}")
+}

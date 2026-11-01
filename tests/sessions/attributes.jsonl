@@ -1,4 +1,4 @@
-# attributes (eider-lang docs/compiler.md, "C8.30"): the keys of an attribute are completed
+# attributes (eider-lang docs/compiler.md, "C8.40"): the keys of an attribute are completed
 # inside `@name(...)`, from the record type its `attr` declaration is; diagnostics for an
 # unknown key
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}

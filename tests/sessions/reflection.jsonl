@@ -1,4 +1,4 @@
-# comptime reflection (eider-lang docs/compiler.md, "C8.31"): a reflective generic function
+# comptime reflection (eider-lang docs/compiler.md, "C8.41"): a reflective generic function
 # analyses like any other; `fie` completes to `fields`
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
 {"jsonrpc":"2.0","method":"initialized","params":{}}

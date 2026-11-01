@@ -132,7 +132,7 @@ pub fn send(body: List[u8]) uses io { io.out(frame(body)) }
 
 /// `{"jsonrpc":"2.0","id":<id>,"result":<result>}` (`id` and `result` are JSON text).
 pub fn result(id: List[u8], res: List[u8]) -> List[u8] {
-    let mut o = sys.lit("{\"jsonrpc\":\"2.0\",\"id\":")
+    let mut o = sys.lit("{{\"jsonrpc\":\"2.0\",\"id\":")
     bytes.append(inout o, id)
     bytes.append(inout o, sys.lit(",\"result\":"))
     bytes.append(inout o, res)
@@ -141,18 +141,18 @@ pub fn result(id: List[u8], res: List[u8]) -> List[u8] {
 }
 
 pub fn error(id: List[u8], code: i64, msg: List[u8]) -> List[u8] {
-    let mut o = sys.lit("{\"jsonrpc\":\"2.0\",\"id\":")
+    let mut o = sys.lit("{{\"jsonrpc\":\"2.0\",\"id\":")
     bytes.append(inout o, id)
-    bytes.append(inout o, sys.lit(",\"error\":{\"code\":"))
+    bytes.append(inout o, sys.lit(",\"error\":{{\"code\":"))
     bytes.append(inout o, bytes.from_i64(code))
     bytes.append(inout o, sys.lit(",\"message\":"))
     json.quote_into(inout o, msg)
-    bytes.append(inout o, sys.lit("}}"))
+    bytes.append(inout o, sys.lit(r"}}"))
     o
 }
 
 pub fn notification(method: str, params: List[u8]) -> List[u8] {
-    let mut o = sys.lit("{\"jsonrpc\":\"2.0\",\"method\":")
+    let mut o = sys.lit("{{\"jsonrpc\":\"2.0\",\"method\":")
     json.quote_into(inout o, sys.lit(method))
     bytes.append(inout o, sys.lit(",\"params\":"))
     bytes.append(inout o, params)
