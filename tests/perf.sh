@@ -16,6 +16,19 @@ mkdir -p "$T"
 src=$(cd "${EIDER_LANG:-$root/../eider-lang}/compiler" 2>/dev/null && pwd -P)
 [ -f "$src/check.ei" ] || { echo "skip perf: no compiler/check.ei in the toolchain (set EIDER_LANG)"; exit 0; }
 lines=$(wc -l < "$src/check.ei")
+# positions in main.ei are found by searching for code, not fixed line numbers, so edits to the
+# compiler don't move them: `pos TEXT OFFSET` prints `"line":L,"character":C` (0-based) for the
+# first line of main.ei containing TEXT, OFFSET characters into it
+pos() {
+  awk -v t="$1" -v o="$2" 'i = index($0, t) { printf "\"line\":%d,\"character\":%d", NR - 1, i - 1 + o; f = 1; exit }
+    END { exit !f }' "$src/main.ei"
+}
+# in `fn report`, the call `diag.demangle(d.msg)` (hover, definition into diag.ei, completion)
+# and the field `msg` it assigns (hover after a change); the name of `fn report` (references)
+call=$(pos "d2.msg = diag.demangle(d.msg)" 14) &&
+  field=$(pos "d2.msg = diag.demangle(d.msg)" 4) &&
+  decl=$(pos "fn report(" 3) ||
+  { echo "FAIL perf: compiler/main.ei has no 'fn report(' or 'd2.msg = diag.demangle(d.msg)' (update tests/perf.sh)"; exit 1; }
 U='"textDocument":{"uri":"file://${ROOT}/check.ei"}'
 M='"textDocument":{"uri":"file://${ROOT}/main.ei"}'
 cat > "$T/perf.jsonl" <<EOF
@@ -26,13 +39,13 @@ cat > "$T/perf.jsonl" <<EOF
 {"jsonrpc":"2.0","id":3,"method":"textDocument/semanticTokens/full","params":{$U}}
 {"jsonrpc":"2.0","id":4,"method":"textDocument/foldingRange","params":{$U}}
 !open main.ei 1
-{"jsonrpc":"2.0","id":5,"method":"textDocument/hover","params":{$M,"position":{"line":256,"character":14}}}
-{"jsonrpc":"2.0","id":6,"method":"textDocument/definition","params":{$M,"position":{"line":256,"character":14}}}
-{"jsonrpc":"2.0","id":7,"method":"textDocument/references","params":{$M,"position":{"line":107,"character":4},"context":{"includeDeclaration":true}}}
-{"jsonrpc":"2.0","id":8,"method":"textDocument/completion","params":{$M,"position":{"line":256,"character":14}}}
+{"jsonrpc":"2.0","id":5,"method":"textDocument/hover","params":{$M,"position":{$call}}}
+{"jsonrpc":"2.0","id":6,"method":"textDocument/definition","params":{$M,"position":{$call}}}
+{"jsonrpc":"2.0","id":7,"method":"textDocument/references","params":{$M,"position":{$decl},"context":{"includeDeclaration":true}}}
+{"jsonrpc":"2.0","id":8,"method":"textDocument/completion","params":{$M,"position":{$call}}}
 {"jsonrpc":"2.0","id":11,"method":"textDocument/semanticTokens/full","params":{$M}}
 !change main.ei 2 main.ei
-{"jsonrpc":"2.0","id":9,"method":"textDocument/hover","params":{$M,"position":{"line":256,"character":8}}}
+{"jsonrpc":"2.0","id":9,"method":"textDocument/hover","params":{$M,"position":{$field}}}
 {"jsonrpc":"2.0","id":10,"method":"shutdown"}
 {"jsonrpc":"2.0","method":"exit"}
 EOF
@@ -51,6 +64,6 @@ limit=${LIMIT_MS:-10000}
 slow=$(sed -n 's/.* \([0-9][0-9]*\) ms.*/\1/p' "$T/perf.err" | awk -v l="$limit" '$1 > l' | head -1)
 [ -z "$slow" ] || { echo "FAIL perf: something took ${slow} ms (limit $limit)"; fail=1; }
 grep -q '"id":2,"result":\[{' "$T/perf.got" || { echo "FAIL perf: no document symbols"; fail=1; }
-grep -q '"id":6,"result":{"uri"' "$T/perf.got" || { echo "FAIL perf: no definition"; fail=1; }
+grep -q '"id":6,"result":{"uri":"file://${ROOT}/diag.ei"' "$T/perf.got" || { echo "FAIL perf: no definition of diag.demangle in diag.ei"; fail=1; }
 [ $fail = 0 ] && echo "ok   perf"
 exit $fail
