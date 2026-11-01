@@ -95,6 +95,12 @@ fn main() uses io {
     }
     let mut taken: Option[i32] = Some(4)
     let old = taken.take().unwrap_or(0)
+    // C8.30: guards, ranges and field patterns: `q` a binding, `w` a binding, none from the rest
+    let classed = match total {
+        0..=9 => 1
+        q if q > 100 => q
+        _ => 0
+    }
     // C8.28: a literal's names are tokens of their own, its text a string
     let shown = "{total:>4} {words} {{x}}"
     let raw = r#"say "hi""#

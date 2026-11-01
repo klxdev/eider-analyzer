@@ -6,6 +6,10 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 
 ## Unreleased
 
+The pattern-matching finish (eider-lang issues #98 and #105, docs/compiler.md C8.30): a
+constant in a pattern goes to the constant, a field pattern's name is a binding, a guard sees
+the arm's bindings; no false diagnostics (tests/sessions/patterns.jsonl).
+
 `defer` and `errdefer` (eider-lang issue #15, docs/compiler.md C8.29): completion offers the
 words; diagnostics (E0309, E0310 with its quick fix) are the compiler's, and a name used in
 deferred code has one reference however many exits run it (tests/sessions/defer.jsonl).

@@ -1,0 +1,28 @@
+// The pattern-matching finish (eider-lang docs/compiler.md, "C8.30"; tests/sessions/patterns.jsonl):
+// a constant in a pattern is a reference to it, a field pattern's name a binding, and a guard
+// sees the arm's bindings.
+const LIMIT: i32 = 10
+
+type Point = { x: i32, y: i32 }
+
+fn size(n: i32) -> i32 {
+    match n {
+        LIMIT => 1
+        0..=9 => 2
+        k if k > 100 => k
+        _ => 3
+    }
+}
+
+fn point(p: Point) -> i32 {
+    match p {
+        Point { x, y: 0 } => x
+        Point { y, .. } if y > 0 => y
+        Point { x, y } => x + y
+    }
+}
+
+fn main() uses io {
+    print(size(LIMIT))
+    print(point(Point(1, 2)))
+}

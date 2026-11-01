@@ -1,0 +1,13 @@
+# the pattern-matching finish (eider-lang docs/compiler.md, "C8.30"; fixtures/patterns.ei): no
+# false diagnostics; definition of a constant in a pattern goes to the constant, of a guard's
+# name to its binding, of a field pattern's use to the field pattern's name; the outline lists
+# what is bound in field patterns as locals
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/patterns.ei 1
+{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/patterns.ei"},"position":{"line":9,"character":10}}}
+{"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/patterns.ei"},"position":{"line":11,"character":13}}}
+{"jsonrpc":"2.0","id":4,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/patterns.ei"},"position":{"line":18,"character":29}}}
+{"jsonrpc":"2.0","id":5,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/patterns.ei"},"position":{"line":19,"character":36}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}
