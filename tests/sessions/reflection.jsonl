@@ -1,0 +1,11 @@
+# comptime reflection (eider-lang docs/compiler.md, "C8.41"): a reflective generic function
+# analyses like any other; `fie` completes to `fields`
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/reflect.ei","languageId":"eider","version":1,"text":"attr json { name: str = \"\", skip: bool = false }\n\ntype User = { @json(name = \"user_id\") id: u64, name: String }\n\nfn keys[T](x: T) -> i64 {\n    let mut n: i64 = 0\n    comptime for f in fields(T) {\n        comptime if !attr[json](f).skip { n += 1 }\n    }\n    n\n}\n\nfn main() uses io {\n    let u = User(1, String.from(\"a\"))\n    print(keys(u))\n    comptime for f in fie\n}\n"}}}
+# `comptime for f in fie`: the reflection `fields`
+{"jsonrpc":"2.0","id":2,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/reflect.ei"},"position":{"line":15,"character":25}}}
+# hover on `keys` in main
+{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/reflect.ei"},"position":{"line":14,"character":11}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

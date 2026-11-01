@@ -11,6 +11,12 @@ for a type that inherits one, definition goes to the trait's method, and complet
 `x.` offers the methods of a trait the file implements for x's type
 (tests/sessions/defaults.jsonl).
 
+- Attributes (eider-lang docs/compiler.md, "C8.40"): inside `@name(` and `@alias.name(`, the
+  keys of the attribute (the fields of the record type its `attr` declaration is) are
+  completed, with their types and defaults; tests/sessions/attributes.
+- Comptime reflection (eider-lang docs/compiler.md, "C8.41"): `fields`, `variants` and
+  `has_attr` complete as keywords; reflective generic code is analysed by the compiler like
+  any other (tests/sessions/reflection).
 The pattern-matching finish (eider-lang issues #98 and #105, docs/compiler.md C8.30): a
 constant in a pattern goes to the constant, a field pattern's name is a binding, a guard sees
 the arm's bindings; no false diagnostics (tests/sessions/patterns.jsonl).
