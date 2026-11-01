@@ -13,8 +13,10 @@ wire=$root/target/bin/lsp-wire
 T=$root/target/tests
 mkdir -p "$T"
 # the compiler's sources: the eiderc path dependency in eider.toml (the toolchain's compiler/)
-src=$(cd "${EIDER_LANG:-$root/../eider-lang}/compiler" 2>/dev/null && pwd -P)
-[ -f "$src/check.ei" ] || { echo "skip perf: no compiler/check.ei in the toolchain (set EIDER_LANG)"; exit 0; }
+here=$root
+. scripts/env.sh
+src=$toolchain/compiler
+[ -f "$src/check.ei" ] || { echo "skip perf: no compiler/check.ei in the toolchain"; exit 0; }
 lines=$(wc -l < "$src/check.ei")
 # positions in main.ei are found by searching for code, not fixed line numbers, so edits to the
 # compiler don't move them: `pos TEXT OFFSET` prints `"line":L,"character":C` (0-based) for the

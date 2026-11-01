@@ -11,7 +11,9 @@
 cd "$(dirname "$0")/.." || exit 1
 root=$(pwd)
 server=$root/target/bin/eider-analyzer
-lang=$(cd "${EIDER_LANG:-$root/../eider-lang}" 2>/dev/null && pwd -P)
+here=$root
+. scripts/env.sh
+lang=$toolchain
 T=$root/target/tests
 mkdir -p "$T"
 fail=0

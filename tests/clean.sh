@@ -1,6 +1,6 @@
 #!/bin/sh
 # No false diagnostics on the language's own code: every .ei file under the toolchain's
-# examples/ and std/ (eider-lang, $EIDER_LANG, default ../eider-lang) is opened in the
+# std/, and examples/ when it is an eider-lang checkout (scripts/env.sh's) is opened in the
 # server, one at a time, and every publishDiagnostics it sends must be empty. These files
 # build with the current compiler, so any diagnostic is the analyzer lagging the language
 # (for example "expected `=`" on `let mut`, before the analyzer was rebuilt for C8.6).
@@ -11,9 +11,11 @@ server=$root/target/bin/eider-analyzer
 wire=$root/target/bin/lsp-wire
 T=$root/target/tests
 mkdir -p "$T"
-lang=$(cd "${EIDER_LANG:-$root/../eider-lang}" 2>/dev/null && pwd -P)
-[ -d "$lang/examples" ] && [ -d "$lang/std" ] || { echo "skip clean: no examples/ and std/ in the toolchain (set EIDER_LANG)"; exit 0; }
-(cd "$lang" && find examples std -name '*.ei' -not -path '*/deps/*' | sort) > "$T/clean.files"
+here=$root
+. scripts/env.sh
+lang=$toolchain
+dirs=std; [ -d "$lang/examples" ] && dirs="examples std"
+(cd "$lang" && find $dirs -name '*.ei' -not -path '*/deps/*' | sort) > "$T/clean.files"
 {
   echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}","capabilities":{}}}'
   echo '{"jsonrpc":"2.0","method":"initialized","params":{}}'
@@ -48,5 +50,5 @@ if [ -s "$T/clean.bad" ]; then
   sed 's/^.*"uri":"file:\/\/\([^"]*\)".*"message":"\([^"]*\)".*$/  \1: \2/' "$T/clean.bad" | head -20
   fail=1
 fi
-[ $fail = 0 ] && echo "ok   clean ($n files of examples/ and std/, and fixtures/syntax.ei: no diagnostics)"
+[ $fail = 0 ] && echo "ok   clean ($n files of $(echo "$dirs" | sed 's/ / and /'), and fixtures/syntax.ei: no diagnostics)"
 exit $fail

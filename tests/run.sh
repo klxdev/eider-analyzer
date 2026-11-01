@@ -11,18 +11,20 @@
 # frames it). stdout is deframed to one message per line and compared with <name>.out;
 # stderr (the server's log) with <name>.err when that file exists; the exit code with the
 # `# exit N` line of the script (default 0); paths into the toolchain are written
-# ${EIDER_LANG}. tests/debounce.sh, tests/clean.sh (no
-# diagnostics on eider-lang's examples/ and std/), tests/lexical.sh (the lexical stand-in) and
+# ${EIDER_LANG}. The toolchain is scripts/env.sh's ($EIDER_TOOLCHAIN, else the one `eider`
+# picks). tests/debounce.sh, tests/clean.sh (no diagnostics on the toolchain's std/, and
+# examples/ when it is an eider-lang checkout), tests/lexical.sh (the lexical stand-in) and
 # tests/perf.sh are run after the sessions.
 cd "$(dirname "$0")/.." || exit 1
 root=$(pwd)
 if [ -z "$NOBUILD" ]; then
   sh scripts/build.sh >/dev/null || { echo "FAIL build"; exit 1; }
 fi
-# the toolchain and the compiler scripts/build.sh made (package imports need it)
-toolchain=$(cd "${EIDER_LANG:-$root/../eider-lang}" && pwd -P)
+# the toolchain scripts/build.sh used (EIDER_TOOLCHAIN, exported: the tests below use it too)
+here=$root
+. scripts/env.sh
 if [ -z "$NOBUILD" ] || [ ! -x target/bin/lsp-wire ]; then
-  EIDER_ROOT=$toolchain target/eiderc build tests/lsp_wire.ei -o target/bin/lsp-wire >/dev/null || { echo "FAIL build lsp-wire"; exit 1; }
+  ei build tests/lsp_wire.ei -o target/bin/lsp-wire >/dev/null || { echo "FAIL build lsp-wire"; exit 1; }
 fi
 server=$root/target/bin/eider-analyzer
 wire=$root/target/bin/lsp-wire

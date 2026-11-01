@@ -4,6 +4,25 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
+## 0.1.2
+
+Builds and tests with the toolchain `eider` picks (eider-lang#133) instead of a fixed
+eider-lang checkout. scripts/env.sh (sourced by scripts/build.sh and the tests) takes
+`$EIDER_TOOLCHAIN` (a toolchain directory or an eider-lang checkout; eider-lang's
+scripts/check-tools.sh sets it to its checkout), else the toolchain `eider toolchain show
+--json` names for `eider = "0.1"`, else stops with exit 2 and says to install `eider`. The
+toolchain must have the compiler's sources (compiler/, the eiderc package the analyzer
+imports): eider-lang checkouts do, and release toolchains will from the release after 0.1.0
+(eider-lang's scripts/release.sh); with the 0.1.0 toolchain, which has none, build.sh stops
+(exit 2) and says to set `EIDER_TOOLCHAIN` to an eider-lang checkout. eider.toml's eiderc
+path dependency is now `target/toolchain/compiler`, a link build.sh makes to the toolchain,
+so the compiler package, core and std come from one toolchain; `EIDER_LANG` no longer
+chooses it. The binary is built with the toolchain's compiler (through `eider`, or directly
+when `eider` is not on the PATH) rather than a target/eiderc built from compiler/main.ei.
+tests/clean.sh checks the toolchain's std/, and examples/ when it is a checkout. Tested
+with the 0.1.0 toolchain plus v0.1.0's compiler/ (the layout of the next release), and with
+eider-lang main. No change to the server.
+
 ## 0.1.1
 
 Dotted imports (eider-lang issue #91, docs/compiler.md "C8.26"): `import core.sys`,

@@ -41,34 +41,47 @@ rebuilds and tests this repository (the "tools" leg, `scripts/check-tools.sh`).
 
 ## Build
 
-Needs an [eider-lang](../eider-lang) checkout and a C11 compiler; nothing else.
+Needs an Eider toolchain with the compiler's sources, and clang 17+ (or a C11 compiler, as
+the toolchain builds programs); nothing else.
 
 ```sh
-EIDER_LANG=/path/to/eider-lang sh scripts/build.sh   # default: ../eider-lang
+sh scripts/build.sh                                  # the toolchain `eider` picks
+EIDER_TOOLCHAIN=../eider-lang sh scripts/build.sh    # an eider-lang checkout
+sh tests/run.sh                                      # build, then the tests
 ```
+
+The toolchain is the one [`eider`](https://github.com/klxdev/eider-lang/blob/main/docs/site/tooling/eider.md)
+picks (`scripts/env.sh`): `$EIDER_TOOLCHAIN` (an installed toolchain's directory, or an
+eider-lang checkout for unreleased work), else the installed release for `eider.toml`'s
+`eider = "0.1"` (what `eider toolchain show` prints here). Install `eider` and the latest
+toolchain with eider-lang's `install.sh --toolchain`; without either, the scripts stop with
+exit 2 and say so. The analyzer imports the compiler's modules (`import eiderc.ide`), so the
+toolchain must have `compiler/`: an eider-lang checkout does, and release toolchains do from
+the release after Eider 0.1.0 (eider-lang's `scripts/release.sh`). **The 0.1.0 toolchain has
+no `compiler/`**: with it, `scripts/build.sh` stops (exit 2) and says to set
+`EIDER_TOOLCHAIN` to an eider-lang checkout (of `v0.1.0`, or main).
 
 The sources import their dependencies by package name (`import eiderc.ide`, `import json`,
 `import std.fs`, and their own modules as `import eider_analyzer.lsp_model as m`), which the
 compiler resolves through `eider.lock` (eider-lang docs/compiler.md, "C8.3: packages and
 modules" and "C8.26: dotted imports"); there is no `deps/` link farm.
-`scripts/build.sh` runs `eider-lang/scripts/eider-pkg -C . fetch`, builds `target/eiderc`
-from eider-lang's `compiler/` (package imports need a compiler newer than its seed) and then
-`target/bin/eider-analyzer`.
+`scripts/build.sh` links the toolchain as `target/toolchain`, runs `eider eider-pkg -C .
+fetch` and builds `target/bin/eider-analyzer` with the toolchain's compiler (through `eider`,
+or directly when `eider` is not on the PATH).
 
 ### Dependencies
 
-`eider.toml` points at eider-lang's `compiler` (package `eiderc`) as a path dependency,
-`../eider-lang/compiler` (an eider-lang checkout next to this repository); core and std
-(including `io.read`, which the server reads stdin with) come from the same eider-lang
-checkout's toolchain. A different checkout means a different `eider.toml` path and
-`eider-pkg -C . fetch`: the compiler and std must come from one checkout.
+`eider.toml` points at the toolchain's `compiler` (package `eiderc`) as a path dependency,
+`target/toolchain/compiler`; core and std (including `io.read`, which the server reads stdin
+with) come from the same toolchain, so the compiler and std are always from one toolchain.
 
 json is [eider-json](https://github.com/klxdev/eider-json) 0.1.1, a git dependency.
 `scripts/build.sh` fetches it offline through eider-pkg's `EIDER_PKG_OVERRIDE` (a local
 directory standing in for the repository; eider-lang's docs/site/tooling/eider-pkg.md):
-`$EIDER_JSON`, else the checkout `../eider-json`, else the eider-lang checkout's pinned
-release `.vendor/json` (which its `scripts/vendor.sh fetch json` fetches and hash-checks). With the override at the locked release, `eider.lock` is what a
-fetch from GitHub writes (the same commit and content hash).
+`$EIDER_JSON`, else the checkout `../eider-json`, else, when the toolchain is an eider-lang
+checkout, its pinned release `.vendor/json` (which its `scripts/vendor.sh fetch json`
+fetches and hash-checks); else GitHub. With the override at the locked release,
+`eider.lock` is what a fetch from GitHub writes (the same commit and content hash).
 
 ### Version
 
@@ -77,7 +90,7 @@ fetch from GitHub writes (the same commit and content hash).
 (`eider-analyzer 0.1.0 (eider 0.1.0)`), and the LSP `initialize` reply's `serverInfo` has it.
 eider-analyzer ships with the Eider toolchain: its MAJOR.MINOR is always the toolchain's,
 its PATCH its own, for fixes between toolchain releases. `scripts/build.sh` stops (exit 2)
-when the eider-lang checkout's `VERSION` has another MAJOR.MINOR, or none; `eider.toml`'s
+when the toolchain's `VERSION` has another MAJOR.MINOR, or none; `eider.toml`'s
 `eider = "0.1"` makes the compiler say the same (E0811). `lsp_version.ei`, `eider.toml` and
 `.claude-plugin/marketplace.json` carry the version too: `scripts/version.sh check` says
 whether they agree with `VERSION` (eider-lang's `scripts/check-tools.sh` runs it),
@@ -88,7 +101,7 @@ whether they agree with `VERSION` (eider-lang's `scripts/check-tools.sh` runs it
 
 The binary is `target/bin/eider-analyzer`. It needs the Eider toolchain at run time (the
 prelude, `core/prelude.ei`, and the C core for `comptime` constants): set `EIDER_ROOT` to
-the eider-lang checkout, or leave the binary where it is (`target/core` and `target/std` link
+the toolchain it was built with, or leave the binary where it is (`target/core` and `target/std` link
 the toolchain's `core/` and `std/`, which the server finds above its own directory, as
 eiderc does).
 
@@ -156,12 +169,12 @@ the outline, definition, references, hover), and dotted imports (`fixtures/dotte
 package of its own: every form with no diagnostics, hover and definition on path segments
 and namespace uses, folding, completion of module paths). Paths into the toolchain are
 written `${EIDER_LANG}` in the goldens. `tests/debounce.sh` sends 40 changes in a burst
-and checks they cost one analysis; `tests/clean.sh` opens every `.ei` file of eider-lang's
-`examples/` and `std/` and fails on any diagnostic (they build, so one would be the
+and checks they cost one analysis; `tests/clean.sh` opens every `.ei` file of the toolchain's
+`std/` (and `examples/`, in an eider-lang checkout) and fails on any diagnostic (they build, so one would be the
 analyzer lagging the language); `tests/lexical.sh` compares the lexical stand-in's analysis
 (`eider-analyzer --dump-lexical`) of `tests/lexical/*.ei` (`fixtures/syntax.ei` and
 `fixtures/dotted/lexical.ei`) with golden files; `tests/perf.sh` prints the time of every request on
-eider-lang's `compiler/check.ei` and `compiler/main.ei` (the whole compiler).
+the toolchain's `compiler/check.ei` and `compiler/main.ei` (the whole compiler).
 
 ## License
 
