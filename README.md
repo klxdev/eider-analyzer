@@ -29,7 +29,7 @@ crash; stdout carries only the protocol.
 
 The workspace root of a file is the nearest directory with an `eider.toml`.
 
-The analyzer follows eider-lang's docs/compiler.md through C8.30 (bitwise operators, `()`,
+The analyzer follows eider-lang's docs/compiler.md through C8.31 (bitwise operators, `()`,
 package imports, operation traits, `let mut` and `mut` patterns, Ref[T], string escapes,
 type aliases, `for (k, v)`, From, `while let`, labeled loops, Default, method chains across
 lines, dotted imports: `import core.sys`, `import std.{bytes, fs as files}`,

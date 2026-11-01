@@ -1,0 +1,10 @@
+# default methods (eider-lang docs/compiler.md, "C8.31"; fixtures/defaults.ei): `en.he` is the
+# only diagnostic (the type has no field or method `he`); definition of the inherited `hello`
+# goes to the trait's method; completion after `en.he` offers it
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/defaults.ei 1
+{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/defaults.ei"},"position":{"line":15,"character":15}}}
+{"jsonrpc":"2.0","id":3,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/defaults.ei"},"position":{"line":16,"character":15}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

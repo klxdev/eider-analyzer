@@ -6,6 +6,11 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 
 ## Unreleased
 
+Default methods (eider-lang issues #45 and #75, docs/compiler.md C8.31): no false diagnostics
+for a type that inherits one, definition goes to the trait's method, and completion after
+`x.` offers the methods of a trait the file implements for x's type
+(tests/sessions/defaults.jsonl).
+
 The pattern-matching finish (eider-lang issues #98 and #105, docs/compiler.md C8.30): a
 constant in a pattern goes to the constant, a field pattern's name is a binding, a guard sees
 the arm's bindings; no false diagnostics (tests/sessions/patterns.jsonl).

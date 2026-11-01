@@ -944,6 +944,23 @@ fn members(inout o: List[u8], inout seen: List[List[u8]], r: Res, recv: List[u8]
             item_json(inout o, x.name, completion_kind(x.kind), x.detail)
         }
     }
+    // the methods of a trait this file implements for the type: its default methods are
+    // inherited (eider-lang's docs/compiler.md, "C8.31")
+    if r.texts.len() > 0 {
+        for x in r.an.symbols {
+            if x.kind != m.SK_METHOD || x.container == m.NONE || (x.container as usize) >= r.an.symbols.len() { continue }
+            let c = r.an.symbols[x.container as usize]
+            if c.kind != m.SK_TRAIT || !bytes.starts_with(x.name, prefix) || contains_name(seen, x.name) { continue }
+            let mut needle = sys.lit("impl ")
+            bytes.append(inout needle, c.name)
+            bytes.append(inout needle, sys.lit(" for "))
+            bytes.append(inout needle, head)
+            if bytes.find(r.texts[0], needle, 0).is_some() {
+                seen.push(x.name)
+                item_json(inout o, x.name, completion_kind(x.kind), x.detail)
+            }
+        }
+    }
     for b in builtin_methods(head) {
         if bytes.starts_with(b, prefix) && !contains_name(seen, b) {
             seen.push(b)

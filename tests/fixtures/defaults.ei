@@ -1,0 +1,18 @@
+// Default methods (eider-lang docs/compiler.md, "C8.31"; tests/sessions/defaults.jsonl): an
+// inherited method has no false diagnostic, goes to the trait, and completes on the type.
+trait Greet {
+    fn name(self) -> String
+    fn hello(self) -> String { "hello, {self.name()}" }
+}
+
+type En = { who: str }
+
+impl Greet for En {
+    fn name(self) -> String { String.from(self.who) }
+}
+
+fn main() uses io {
+    let en = En("Ada")
+    print(en.hello())
+    print(en.he)
+}
