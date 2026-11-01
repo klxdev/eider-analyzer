@@ -11,7 +11,7 @@ description = "eider-analyzer: a language server (LSP 3.17) for Eider, written i
 # (EIDER_PKG_OVERRIDE: ../eider-json, else the toolchain's pinned copy vendor/json).
 [deps.json]
 git = "https://github.com/klxdev/eider-json.git"
-version = "0.1.0"
+version = "0.1.1"
 
 # The compiler package (eider-lang/compiler): lexer, parser, checker, diagnostics. Only
 # lsp_analysis.ei imports it. No `ffi`: the compiler has no unmanaged code of its own (it

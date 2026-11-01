@@ -11,6 +11,7 @@ Dotted imports (eider-lang issue #91, docs/compiler.md "C8.26"): `import core.sy
 the package namespace `import std` with `std.bytes.eq(x)` and `std.time.Duration`, a
 dependency's modules (`import json`, `import json.stream`) and the package's own by its name
 (`import eider_analyzer.lsp_model as m`). The quoted form still works.
+eider.toml requires, and eider.lock pins, eider-json at its tagged v0.1.1 release.
 
 - The lexical stand-in reads every form: a module symbol per group member, aliases, package
   namespaces and the modules their uses imply, the package's own modules and its path and

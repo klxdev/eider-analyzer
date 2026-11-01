@@ -10,8 +10,8 @@ grants = ["io", "fs", "net", "clock"]
 
 [[package]]
 name = "json"
-version = "0.1.0"
-source = "git+https://github.com/klxdev/eider-json.git#7233c1f77b4426fe5ae5d9c62ac0b3f77f0d37f4"
-hash = "sha256-e67bad5434344a9e1d737e08aaa030506b05f18cdc7a04571c60850f6b10f863"
+version = "0.1.1"
+source = "git+https://github.com/klxdev/eider-json.git#61c05b2af8ec3b5307d02c13ef51d7994d08c256"
+hash = "sha256-4e5aca62179c01755878a94319c0063741843273ef6a70aca0ee69fc7e7bb44e"
 deps = []
 grants = []
