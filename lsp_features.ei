@@ -664,7 +664,7 @@ pub fn completion(r: Res, path: List[u8], text: List[u8], starts: List[u32], p: 
     let pc = path_context(text, a)
     let an = attr_context(text, a)
     if an.len() > 0 {
-        // a key of an attribute (eider-lang docs/compiler.md, "C8.28"): `@json(na|`
+        // a key of an attribute (eider-lang docs/compiler.md, "C8.30"): `@json(na|`
         attr_keys(inout o, inout seen, r, an, prefix)
     } else if pc.found {
         // a module path: after `import `, `import a.`, or in a group's `{ }`
@@ -876,7 +876,9 @@ fn keywords() -> List[List[u8]] {
         "Option", "Result", "Some", "None", "Ok", "Err", "print", "panic", "len", "spawn", "Task", "Mutex", "Chan",
         // since docs/compiler.md C8.4 to C8.23: `let mut`, Ref[T] and the prelude's Ordering and traits
         "mut", "Ref", "Ordering", "Less", "Equal", "Greater", "Copy", "Eq", "Ord", "Hash", "Show", "Iter", "Drop",
-        "From", "Default"] { out.push(sys.lit(w)) }
+        "From", "Default",
+        // comptime reflection (eider-lang docs/compiler.md, "C8.31")
+        "fields", "variants", "has_attr"] { out.push(sys.lit(w)) }
     out
 }
 

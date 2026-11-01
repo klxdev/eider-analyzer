@@ -6,9 +6,12 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 
 ## Unreleased
 
-- Attributes (eider-lang docs/compiler.md, "C8.28"): inside `@name(` and `@alias.name(`, the
+- Attributes (eider-lang docs/compiler.md, "C8.30"): inside `@name(` and `@alias.name(`, the
   keys of the attribute (the fields of the record type its `attr` declaration is) are
   completed, with their types and defaults; tests/sessions/attributes.
+- Comptime reflection (eider-lang docs/compiler.md, "C8.31"): `fields`, `variants` and
+  `has_attr` complete as keywords; reflective generic code is analysed by the compiler like
+  any other (tests/sessions/reflection).
 
 ## 0.2.0
 
