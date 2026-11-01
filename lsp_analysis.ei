@@ -549,8 +549,8 @@ fn file_of(id: u32, src: List[u8], lx: lex.Lexed) -> standin.File {
             lex.Int => { kind = standin.TK_INT }
             lex.Newline => { kind = standin.TK_NL }
             lex.Eof => { kind = standin.TK_EOF }
-            // an f-string's text is a string to the stand-in, and its delimiters (`f"`, the
-            // braces of a `{...}`, the closing quote) are punctuation it doesn't match on
+            // an interpolating literal's text is a string to the stand-in, and its delimiters
+            // (the quotes, the braces of a `{...}`) are punctuation it doesn't match on
             // (docs/compiler.md, "C8.28"); the expression in the braces is tokens as usual
             lex.FText => {
                 kind = standin.TK_STR

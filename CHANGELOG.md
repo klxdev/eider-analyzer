@@ -10,14 +10,13 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 words; diagnostics (E0309, E0310 with its quick fix) are the compiler's, and a name used in
 deferred code has one reference however many exits run it (tests/sessions/defer.jsonl).
 
-Raw and multi-line strings (eider-lang issue #13, docs/compiler.md C8.28): `r"..."`,
-`r#"..."#`, `"""` and `f"""` strings get no false diagnostics (tests/fixtures/strings.ei,
-tests/fixtures/syntax.ei).
-
-f-strings (eider-lang issue #17, docs/compiler.md C8.28): `f"{x:>8}"`. The compiler's own
-front end gives diagnostics (E0412 with its quick fix), hover, definition and references
-inside an f-string's braces; the lexical stand-in reads an f-string's text as a string and
-the names in its braces as references (tests/sessions/strings.jsonl, tests/fixtures/syntax.ei).
+String literals (eider-lang issues #17 and #13, decision U29, docs/compiler.md C8.28): every
+plain literal interpolates (`"{x:>8}"`, `{{` for a brace), and raw strings (`r"..."`,
+`r#"..."#`, `r"""`) and multi-line `"""` strings exist. The compiler's own front end gives
+diagnostics (E0412 with its quick fix), hover, definition and references inside a literal's
+braces; the lexical stand-in reads its text as a string and the names in its braces as
+references (tests/sessions/strings.jsonl, tests/fixtures/syntax.ei). This repository's
+literals with braces are migrated (`eiderc migrate-strings`).
 
 ## 0.2.0
 

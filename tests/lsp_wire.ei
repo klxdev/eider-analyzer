@@ -98,7 +98,7 @@ fn frame(root: List[u8]) uses io, fs {
         Ok(t) => t
         Err(_) => List.new()
     }
-    let var_root = sys.lit("${ROOT}")
+    let var_root = sys.lit(r"${ROOT}")
     let mut out: List[u8] = List.new()
     for line in bytes.split(input, 10) {
         let mut l = line.copy()
@@ -122,21 +122,21 @@ fn frame(root: List[u8]) uses io, fs {
             let text = read_or_die(src_path)
             let mut b: List[u8] = List.new()
             if open {
-                b = sys.lit("{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":")
+                b = sys.lit("{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{{\"textDocument\":{{\"uri\":")
                 json.quote_into(inout b, uri(root, w[1]))
                 bytes.append(inout b, sys.lit(",\"languageId\":\"eider\",\"version\":"))
                 bytes.append(inout b, w[2])
                 bytes.append(inout b, sys.lit(",\"text\":"))
                 json.quote_into(inout b, text)
-                bytes.append(inout b, sys.lit("}}}"))
+                bytes.append(inout b, sys.lit(r"}}}"))
             } else {
-                b = sys.lit("{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didChange\",\"params\":{\"textDocument\":{\"uri\":")
+                b = sys.lit("{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didChange\",\"params\":{{\"textDocument\":{{\"uri\":")
                 json.quote_into(inout b, uri(root, w[1]))
                 bytes.append(inout b, sys.lit(",\"version\":"))
                 bytes.append(inout b, w[2])
-                bytes.append(inout b, sys.lit("},\"contentChanges\":[{\"text\":"))
+                bytes.append(inout b, sys.lit("}},\"contentChanges\":[{{\"text\":"))
                 json.quote_into(inout b, text)
-                bytes.append(inout b, sys.lit("}]}}"))
+                bytes.append(inout b, sys.lit(r"}]}}"))
             }
             bytes.append(inout out, rpc.frame(b))
             continue
@@ -158,7 +158,7 @@ fn deframe(root: List[u8]) uses io {
     while going {
         match rpc.next(inout f) {
             rpc.Body(b) => {
-                bytes.append(inout out, subst(b, root, sys.lit("${ROOT}")))
+                bytes.append(inout out, subst(b, root, sys.lit(r"${ROOT}")))
                 out.push(10)
             }
             rpc.Dropped(why) => {

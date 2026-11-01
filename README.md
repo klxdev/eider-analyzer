@@ -34,7 +34,7 @@ package imports, operation traits, `let mut` and `mut` patterns, Ref[T], string 
 type aliases, `for (k, v)`, From, `while let`, labeled loops, Default, method chains across
 lines, dotted imports: `import core.sys`, `import std.{bytes, fs as files}`,
 `import std.encoding as enc`, the namespace `import std` with `std.bytes.eq(x)`, a package's
-own modules by its name, f-strings, raw and multi-line strings, `defer` and `errdefer`). The compiler is a path dependency, so its parser and checker are always the
+own modules by its name, interpolation in every string literal, raw and multi-line strings, `defer` and `errdefer`). The compiler is a path dependency, so its parser and checker are always the
 checkout's; what the analyzer adds on top (the stand-in, completion lists, hover texts) is
 updated in the same wave as a syntax or IDE-visible change: eider-lang's `scripts/verify.sh`
 rebuilds and tests this repository (the "tools" leg, `scripts/check-tools.sh`).

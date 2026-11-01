@@ -1,11 +1,11 @@
 // String literals (eider-lang docs/compiler.md, "C8.28"; tests/sessions/strings.jsonl): the
-// names inside an f-string's braces are references like any other, and a raw or multi-line
+// names inside a literal's braces are references like any other, and a raw or multi-line
 // string is just a str.
 type Item = { name: str, count: u32 }
 
 fn label(it: Item) -> String {
     let width: u32 = 8
-    f"{it.name:>8} x{it.count} ({width})"
+    "{it.name:>8} x{it.count} ({width})"
 }
 
 fn main() uses io {
@@ -16,5 +16,5 @@ fn main() uses io {
         """
     print(banner)
     print(label(it))
-    print(f"{it.name:x}")
+    print("{it.name:x}")
 }

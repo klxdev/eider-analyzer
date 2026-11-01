@@ -237,7 +237,7 @@ fn publish(res: feat.Res, old: List[List[u8]]) -> List[List[u8]] uses io {
     if !has0 { files.push(0) }
     for f in files {
         let uri = feat.uri_of(res, f)
-        let mut p = sys.lit("{\"uri\":")
+        let mut p = sys.lit("{{\"uri\":")
         json.quote_into(inout p, uri)
         if f == 0 {
             bytes.append(inout p, sys.lit(",\"version\":"))
@@ -255,9 +255,9 @@ fn publish(res: feat.Res, old: List[List[u8]]) -> List[List[u8]] uses io {
             if bytes.eq(x, u) { still = true }
         }
         if !still {
-            let mut p = sys.lit("{\"uri\":")
+            let mut p = sys.lit("{{\"uri\":")
             json.quote_into(inout p, u)
-            bytes.append(inout p, sys.lit(",\"diagnostics\":[]}"))
+            bytes.append(inout p, sys.lit(",\"diagnostics\":[]}}"))
             rpc.send(rpc.notification("textDocument/publishDiagnostics", p))
         }
     }
@@ -426,9 +426,9 @@ fn notification(inout s: S, method: List[u8], d: json.Doc, params: u32) uses io,
         let mut all = slot.published.copy()
         all.push(uri)
         for u in all {
-            let mut p = sys.lit("{\"uri\":")
+            let mut p = sys.lit("{{\"uri\":")
             json.quote_into(inout p, u)
-            bytes.append(inout p, sys.lit(",\"diagnostics\":[]}"))
+            bytes.append(inout p, sys.lit(",\"diagnostics\":[]}}"))
             rpc.send(rpc.notification("textDocument/publishDiagnostics", p))
         }
         let mut docs: List[Doc] = List.new()
@@ -473,8 +473,8 @@ fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8])
         None => {
             // not open: answer emptily rather than reading the disk behind the client's back
             let empty = if is(method, "textDocument/hover") || is(method, "textDocument/definition") || is(method, "textDocument/references") { sys.lit("null") } else { sys.lit("[]") }
-            if is(method, "textDocument/semanticTokens/full") { return rpc.result(id, sys.lit("{\"data\":[]}")) }
-            if is(method, "textDocument/completion") { return rpc.result(id, sys.lit("{\"isIncomplete\":false,\"items\":[]}")) }
+            if is(method, "textDocument/semanticTokens/full") { return rpc.result(id, sys.lit("{{\"data\":[]}}")) }
+            if is(method, "textDocument/completion") { return rpc.result(id, sys.lit("{{\"isIncomplete\":false,\"items\":[]}}")) }
             return rpc.result(id, empty)
         }
     }
@@ -519,18 +519,18 @@ fn roots_from(inout s: S, d: json.Doc, params: u32) {
 }
 
 fn capabilities() -> List[u8] {
-    let mut o = sys.lit("{\"capabilities\":{")
+    let mut o = sys.lit("{{\"capabilities\":{{")
     bytes.append(inout o, sys.lit("\"positionEncoding\":\"utf-16\","))
-    bytes.append(inout o, sys.lit("\"textDocumentSync\":{\"openClose\":true,\"change\":1,\"save\":{\"includeText\":false}},"))
+    bytes.append(inout o, sys.lit("\"textDocumentSync\":{{\"openClose\":true,\"change\":1,\"save\":{{\"includeText\":false}}}},"))
     bytes.append(inout o, sys.lit("\"hoverProvider\":true,\"definitionProvider\":true,\"referencesProvider\":true,"))
     bytes.append(inout o, sys.lit("\"documentSymbolProvider\":true,\"foldingRangeProvider\":true,"))
-    bytes.append(inout o, sys.lit("\"codeActionProvider\":{\"codeActionKinds\":[\"quickfix\"]},"))
-    bytes.append(inout o, sys.lit("\"completionProvider\":{\"triggerCharacters\":[\".\"]},"))
-    bytes.append(inout o, sys.lit("\"semanticTokensProvider\":{\"legend\":"))
+    bytes.append(inout o, sys.lit("\"codeActionProvider\":{{\"codeActionKinds\":[\"quickfix\"]}},"))
+    bytes.append(inout o, sys.lit("\"completionProvider\":{{\"triggerCharacters\":[\".\"]}},"))
+    bytes.append(inout o, sys.lit("\"semanticTokensProvider\":{{\"legend\":"))
     bytes.append(inout o, feat.legend())
-    bytes.append(inout o, sys.lit(",\"full\":true}"))
-    bytes.append(inout o, sys.lit("},\"serverInfo\":{\"name\":\"eider-analyzer\",\"version\":\""))
+    bytes.append(inout o, sys.lit(",\"full\":true}}"))
+    bytes.append(inout o, sys.lit("}},\"serverInfo\":{{\"name\":\"eider-analyzer\",\"version\":\""))
     bytes.append(inout o, sys.lit(ver.VERSION))
-    bytes.append(inout o, sys.lit("\"}}"))
+    bytes.append(inout o, sys.lit("\"}}}}"))
     o
 }
