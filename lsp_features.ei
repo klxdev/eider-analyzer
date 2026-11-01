@@ -662,7 +662,11 @@ pub fn completion(r: Res, path: List[u8], text: List[u8], starts: List[u32], p: 
     let mut o = sys.lit("{\"isIncomplete\":false,\"items\":[")
     let mut seen: List[List[u8]] = List.new()
     let pc = path_context(text, a)
-    if pc.found {
+    let an = attr_context(text, a)
+    if an.len() > 0 {
+        // a key of an attribute (eider-lang docs/compiler.md, "C8.28"): `@json(na|`
+        attr_keys(inout o, inout seen, r, an, prefix)
+    } else if pc.found {
         // a module path: after `import `, `import a.`, or in a group's `{ }`
         if !pc.alias {
             let names = if pc.segs.len() == 0 { analysis.import_heads(path) } else { analysis.modules_below(path, pc.segs) }
@@ -720,6 +724,56 @@ pub fn completion(r: Res, path: List[u8], text: List[u8], starts: List[u32], p: 
     }
     bytes.append(inout o, sys.lit("]}"))
     o
+}
+
+/// When offset `a` (the start of the identifier being typed) is where a key of an attribute
+/// goes, `@name(` or `@alias.name(` then keys and values up to a `,`: the attribute's name,
+/// else empty.
+fn attr_context(text: List[u8], a: usize) -> List[u8] {
+    let none: List[u8] = List.new()
+    let mut j = a.copy()
+    while j > 0 && (text[j - 1] == 32 || text[j - 1] == 9 || text[j - 1] == 10 || text[j - 1] == 13) { j -= 1 }
+    if j == 0 || (text[j - 1] != 40 && text[j - 1] != 44) { return none }
+    // back to the `(` that opens the arguments (no brace or `;` in between)
+    let mut depth: u32 = 0
+    while j > 0 {
+        let ch = text[j - 1]
+        if ch == 41 { depth += 1 }
+        if ch == 40 {
+            if depth == 0 { break }
+            depth -= 1
+        }
+        if ch == 123 || ch == 125 || ch == 59 { return none }
+        j -= 1
+    }
+    if j == 0 { return none }
+    let close = j - 1
+    let mut b = close.copy()
+    while b > 0 && bytes.is_ident(text[b - 1]) { b -= 1 }
+    if b == close { return none }
+    let name = bytes.slice(text, b, close)
+    // `@name(` or `@alias.name(`
+    if b > 0 && text[b - 1] == 64 { return name }
+    if b > 1 && text[b - 1] == 46 {
+        let mut c = b - 1
+        while c > 0 && bytes.is_ident(text[c - 1]) { c -= 1 }
+        if c > 0 && c < b - 1 && text[c - 1] == 64 { return name }
+    }
+    none
+}
+
+/// The keys of attribute `name` (the fields of the record type its `attr` declares) that
+/// start with `prefix`.
+fn attr_keys(inout o: List[u8], inout seen: List[List[u8]], r: Res, name: List[u8], prefix: List[u8]) {
+    for x in r.an.symbols {
+        if x.kind != m.SK_FIELD || x.container == m.NONE || (x.container as usize) >= r.an.symbols.len() { continue }
+        let c = r.an.symbols[x.container as usize]
+        if c.kind != m.SK_TYPE || !bytes.eq(c.name, name) { continue }
+        if bytes.starts_with(x.name, prefix) && !contains_name(seen, x.name) {
+            seen.push(x.name)
+            item_json(inout o, x.name, 10, x.detail)
+        }
+    }
 }
 
 /// Where a module path is typed (`found`): `segs` the segments before the one being typed,

@@ -4,6 +4,12 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
+## Unreleased
+
+- Attributes (eider-lang docs/compiler.md, "C8.28"): inside `@name(` and `@alias.name(`, the
+  keys of the attribute (the fields of the record type its `attr` declaration is) are
+  completed, with their types and defaults; tests/sessions/attributes.
+
 ## 0.2.0
 
 For Eider 0.2 (`eider = "0.2"`): eider-lang's 0.2 builds programs only through LLVM (clang

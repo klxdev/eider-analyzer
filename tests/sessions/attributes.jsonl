@@ -1,0 +1,14 @@
+# attributes (eider-lang docs/compiler.md, "C8.28"): the keys of an attribute are completed
+# inside `@name(...)`, from the record type its `attr` declaration is; diagnostics for an
+# unknown key
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/attrs.ei","languageId":"eider","version":1,"text":"attr json { name: str = \"\", skip: bool = false, depth: i32 = 0 }\n\n@json(sk)\ntype User = {\n    @json(name = \"user_id\", d) id: u64,\n}\n\nfn main() {}\n"}}}
+# `@json(sk`: the key `skip`
+{"jsonrpc":"2.0","id":2,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/attrs.ei"},"position":{"line":2,"character":8}}}
+# `@json(name = "user_id", d`: the key `depth`
+{"jsonrpc":"2.0","id":3,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/attrs.ei"},"position":{"line":4,"character":29}}}
+# `@json(`: every key
+{"jsonrpc":"2.0","id":4,"method":"textDocument/completion","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/attrs.ei"},"position":{"line":2,"character":6}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}
