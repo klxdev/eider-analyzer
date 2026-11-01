@@ -32,8 +32,8 @@ if [ "${theirs%.*}" != "${mine%.*}" ]; then
 fi
 # json is a git package (eider-json). Offline, eider-pkg takes it from a local directory
 # (EIDER_PKG_OVERRIDE, eider-lang's docs/site/tooling/eider-pkg.md): $EIDER_JSON, else the
-# checkout ../eider-json, else the toolchain's pinned release .vendor/json (fetched there with
-# its scripts/vendor.sh; vendor/json in a toolchain from before eider-lang #122). eider.lock keeps
+# checkout ../eider-json, else the toolchain's pinned release .vendor/json (fetched and
+# hash-checked there by its scripts/vendor.sh); else GitHub. eider.lock keeps
 # the git source and the content hash; the fetch runs every time, since the store copy it
 # points at may not be there yet.
 case ",$EIDER_PKG_OVERRIDE," in
@@ -42,7 +42,6 @@ case ",$EIDER_PKG_OVERRIDE," in
     json=${EIDER_JSON:-}
     [ -n "$json" ] || { [ -f "$here/../eider-json/eider.toml" ] && json=$here/../eider-json; }
     if [ -z "$json" ] && [ -f "$toolchain/vendor.lock" ]; then sh "$toolchain/scripts/vendor.sh" fetch json >&2 && json=$toolchain/.vendor/json; fi
-    [ -n "$json" ] || { [ -f "$toolchain/vendor/json/eider.toml" ] && json=$toolchain/vendor/json; }
     [ -z "$json" ] || EIDER_PKG_OVERRIDE="${EIDER_PKG_OVERRIDE:+$EIDER_PKG_OVERRIDE,}json=$(cd "$json" && pwd -P)"
     ;;
 esac

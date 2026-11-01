@@ -268,7 +268,7 @@ pub fn norm(path: List[u8]) -> List[u8] {
 // What the stand-in and completion need to know about imports without loading a program:
 // the package a file is in (the nearest eider.toml, read with the compiler's own reader),
 // the directory of a package it may import (std and core in the toolchain; itself; a
-// dependency through eider.lock: a path, or a git package's store copy or vendor/ copy, as
+// dependency through eider.lock: a path, or a git package's .vendor/ copy or store copy, as
 // resolve.ei's `locate` finds them), and the file a dotted path names.
 
 /// A package as its eider.toml says (`name` empty: no package, or one whose eider.toml
@@ -330,7 +330,7 @@ pub fn package_dir(pk: Pkg, head: List[u8]) -> List[u8] uses io, fs {
     for e in locked {
         if !bytes.eq(e.name, head) { continue }
         if !e.git { return norm(join(pk.dir, e.path)) }
-        let vendored = join(join(pk.dir, sys.lit("vendor")), head)
+        let vendored = join(join(pk.dir, sys.lit(".vendor")), head)
         if fs.is_dir(vendored) { return vendored }
         return join(join(eider_home(), sys.lit("pkg")), lock.store_leaf(head, e.hash))
     }
@@ -438,7 +438,7 @@ pub fn modules_below(from: List[u8], segs: List[List[u8]]) -> List[ModName] uses
 /// The modules (.ei files) and directories holding modules in `dir`, sorted, a name that
 /// is both once (as the module); `segs` is the path written before them, for the detail.
 /// Not listed: names that aren't identifiers (a keyword, `my-file`), hidden entries,
-/// `target`, `vendor`, `deps`, directories of other packages (their own eider.toml) and the
+/// `target`, `deps`, directories of other packages (their own eider.toml) and the
 /// importing file `from` itself.
 fn list_modules(dir: List[u8], segs: List[List[u8]], from: List[u8]) -> List[ModName] uses fs {
     let mut out: List[ModName] = List.new()
@@ -459,7 +459,7 @@ fn list_modules(dir: List[u8], segs: List[List[u8]], from: List[u8]) -> List[Mod
             if segment(inout names, st) && !fs.is_dir(full) && !bytes.eq(norm(full), from) { mods.push(st) }
             continue
         }
-        if bytes.eq(e, sys.lit("target")) || bytes.eq(e, sys.lit("vendor")) || bytes.eq(e, sys.lit("deps")) { continue }
+        if bytes.eq(e, sys.lit("target")) || bytes.eq(e, sys.lit("deps")) { continue }
         if !segment(inout names, e) || !fs.is_dir(full) { continue }
         if fs.exists(join(full, sys.lit("eider.toml"))) { continue }
         if has_modules(full, 3) { dirs.push(e) }

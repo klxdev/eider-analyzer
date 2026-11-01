@@ -13,7 +13,7 @@ T=$root/target/tests
 mkdir -p "$T"
 lang=$(cd "${EIDER_LANG:-$root/../eider-lang}" 2>/dev/null && pwd -P)
 [ -d "$lang/examples" ] && [ -d "$lang/std" ] || { echo "skip clean: no examples/ and std/ in the toolchain (set EIDER_LANG)"; exit 0; }
-(cd "$lang" && find examples std -name '*.ei' -not -path '*/deps/*' -not -path '*/vendor/*' | sort) > "$T/clean.files"
+(cd "$lang" && find examples std -name '*.ei' -not -path '*/deps/*' | sort) > "$T/clean.files"
 {
   echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}","capabilities":{}}}'
   echo '{"jsonrpc":"2.0","method":"initialized","params":{}}'
