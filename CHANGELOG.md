@@ -4,6 +4,13 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
+## 0.2.0
+
+For Eider 0.2 (`eider = "0.2"`): eider-lang's 0.2 builds programs only through LLVM (clang
+17 or newer; U23) and bootstraps the compiler from a WebAssembly seed (seed/eiderc.wasm; U24).
+scripts/env.sh recognises such a checkout (seed/eiderc.wasm, or seed/eiderc.c before).
+Nothing else changed.
+
 ## 0.1.2
 
 Builds and tests with the toolchain `eider` picks (eider-lang#133) instead of a fixed
