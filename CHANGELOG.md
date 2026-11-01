@@ -4,6 +4,13 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
+## Unreleased
+
+f-strings (eider-lang issue #17, docs/compiler.md C8.28): `f"{x:>8}"`. The compiler's own
+front end gives diagnostics (E0412 with its quick fix), hover, definition and references
+inside an f-string's braces; the lexical stand-in reads an f-string's text as a string and
+the names in its braces as references (tests/sessions/strings.jsonl, tests/fixtures/syntax.ei).
+
 ## 0.2.0
 
 For Eider 0.2 (`eider = "0.2"`): eider-lang's 0.2 builds programs only through LLVM (clang

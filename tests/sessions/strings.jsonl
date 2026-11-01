@@ -1,0 +1,13 @@
+# f-strings (eider-lang docs/compiler.md, "C8.28"; fixtures/strings.ei): no false
+# diagnostics but the real E0412 (a radix on a str) with its quick fix; hover and definition work on the names inside an f-string's braces
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/strings.ei 1
+# hover: `it` and `name` in `{it.name:>8}`; definition: `width` in `({width})`
+{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/strings.ei"},"position":{"line":6,"character":8}}}
+{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/strings.ei"},"position":{"line":6,"character":11}}}
+{"jsonrpc":"2.0","id":4,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/strings.ei"},"position":{"line":6,"character":34}}}
+# the quick fix of E0412 deletes the spec
+{"jsonrpc":"2.0","id":5,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/strings.ei"},"range":{"start":{"line":13,"character":13},"end":{"line":13,"character":13}},"context":{"diagnostics":[]}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

@@ -1,0 +1,15 @@
+// f-strings (eider-lang docs/compiler.md, "C8.28"; tests/sessions/strings.jsonl): the names
+// inside an f-string's braces are references like any other.
+type Item = { name: str, count: u32 }
+
+fn label(it: Item) -> String {
+    let width: u32 = 8
+    f"{it.name:>8} x{it.count} ({width})"
+}
+
+fn main() uses io {
+    let it = Item("bolts", 3)
+    print(f"{{items}}")
+    print(label(it))
+    print(f"{it.name:x}")
+}
