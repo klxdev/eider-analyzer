@@ -97,6 +97,10 @@ fn main() uses io {
     let old = taken.take().unwrap_or(0)
     // C8.28: an f-string's names are tokens of their own, its text a string
     let shown = f"{total:>4} {words} {{x}}"
+    let raw = r#"say "hi""#
+    let text = """
+        a {b}
+        """
     print(total + a + bits(3) as i32 + old + r.get() + words.len() as i32 + s.len() as i32)
     print(size)
 }

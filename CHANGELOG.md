@@ -6,6 +6,10 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 
 ## Unreleased
 
+Raw and multi-line strings (eider-lang issue #13, docs/compiler.md C8.28): `r"..."`,
+`r#"..."#`, `"""` and `f"""` strings get no false diagnostics (tests/fixtures/strings.ei,
+tests/fixtures/syntax.ei).
+
 f-strings (eider-lang issue #17, docs/compiler.md C8.28): `f"{x:>8}"`. The compiler's own
 front end gives diagnostics (E0412 with its quick fix), hover, definition and references
 inside an f-string's braces; the lexical stand-in reads an f-string's text as a string and
