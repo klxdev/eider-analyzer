@@ -63,11 +63,11 @@ from eider-lang's `compiler/` (package imports need a compiler newer than its se
 checkout's toolchain. A different checkout means a different `eider.toml` path and
 `eider-pkg -C . fetch`: the compiler and std must come from one checkout.
 
-json is [eider-json](https://github.com/klxdev/eider-json) 0.1.0, a git dependency.
+json is [eider-json](https://github.com/klxdev/eider-json) 0.1.1, a git dependency.
 `scripts/build.sh` fetches it offline through eider-pkg's `EIDER_PKG_OVERRIDE` (a local
 directory standing in for the repository; eider-lang's docs/site/tooling/eider-pkg.md):
 `$EIDER_JSON`, else the checkout `../eider-json`, else the eider-lang checkout's pinned
-release `vendor/json`. With the override at the locked release, `eider.lock` is what a
+release `.vendor/json` (which its `scripts/vendor.sh fetch json` fetches and hash-checks). With the override at the locked release, `eider.lock` is what a
 fetch from GitHub writes (the same commit and content hash).
 
 ### Version
