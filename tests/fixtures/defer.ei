@@ -1,0 +1,18 @@
+// defer and errdefer (eider-lang docs/compiler.md, "C8.29"; tests/sessions/defer.jsonl):
+// a name used in deferred code is one reference, however many exits emit the code.
+fn load(ok: bool) -> Result[i32, str] uses io {
+    let name = "config"
+    defer print(name)
+    errdefer print("rolled back")
+    if !ok { return Err("bad") }
+    Ok(1)
+}
+
+fn save() uses io {
+    errdefer print(1)
+}
+
+fn main() uses io {
+    print(load(true))
+    save()
+}

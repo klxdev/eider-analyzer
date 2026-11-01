@@ -6,6 +6,10 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 
 ## Unreleased
 
+`defer` and `errdefer` (eider-lang issue #15, docs/compiler.md C8.29): completion offers the
+words; diagnostics (E0309, E0310 with its quick fix) are the compiler's, and a name used in
+deferred code has one reference however many exits run it (tests/sessions/defer.jsonl).
+
 Raw and multi-line strings (eider-lang issue #13, docs/compiler.md C8.28): `r"..."`,
 `r#"..."#`, `"""` and `f"""` strings get no false diagnostics (tests/fixtures/strings.ei,
 tests/fixtures/syntax.ei).

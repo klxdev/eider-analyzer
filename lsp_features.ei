@@ -822,7 +822,9 @@ fn keywords() -> List[List[u8]] {
         "Option", "Result", "Some", "None", "Ok", "Err", "print", "panic", "len", "spawn", "Task", "Mutex", "Chan",
         // since docs/compiler.md C8.4 to C8.23: `let mut`, Ref[T] and the prelude's Ordering and traits
         "mut", "Ref", "Ordering", "Less", "Equal", "Greater", "Copy", "Eq", "Ord", "Hash", "Show", "Iter", "Drop",
-        "From", "Default"] { out.push(sys.lit(w)) }
+        "From", "Default",
+        // C8.29: words at the start of a statement
+        "defer", "errdefer"] { out.push(sys.lit(w)) }
     out
 }
 
