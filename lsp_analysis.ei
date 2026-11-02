@@ -24,6 +24,7 @@ import eiderc.lock
 import eiderc.resolve
 import eiderc.diag
 import eiderc.ide
+import eiderc.lint
 import eider_analyzer.lsp_model as m
 import eider_analyzer.lsp_standin as standin
 import eider_analyzer.lsp_text as txt
@@ -58,6 +59,18 @@ pub fn analyze(entry: List[u8], overlay_paths: List[List[u8]], overlay_texts: Li
         if bytes.eq(sys.lit(d.code), sys.lit("E0001")) { lexing = true }
         let md = diag_of(inout a, d)
         a.diags.push(md)
+    }
+    // the lints of the entry file's package (compiler/lint.ei): hints with their fixes; a denied
+    // lint is an error, the others warnings
+    for f in x.lints {
+        let mut md = diag_of(inout a, f.d)
+        md.code = sys.lit(f.lint)
+        md.sev = if f.level == lint.DENY { 1 } else { 2 }
+        a.diags.push(md)
+    }
+    // the specializations of reflective bodies (eiderc expand)
+    for e in x.expansions {
+        a.expansions.push(m.Expansion(e.name, file_id(inout a, norm(e.file)), e.line, e.col, e.text))
     }
     if lexing && a.symbols.len() == 0 {
         match text_of(path, overlay_paths, overlay_texts) {
@@ -223,7 +236,7 @@ pub fn diag_of(inout a: m.Analysis, d: diag.Diag) -> m.Diag {
         Some(f) => Some(m.Fix(f.line, f.col, f.delete, f.insert))
         None => None
     }
-    m.Diag(sys.lit(d.code), file, d.line, d.col, diag.demangle(d.msg), diag.demangle(d.help), fix)
+    m.Diag(sys.lit(d.code), file, d.line, d.col, diag.demangle(d.msg), diag.demangle(d.help), fix, 1)
 }
 
 fn file_id(inout a: m.Analysis, path: List[u8]) -> u32 {

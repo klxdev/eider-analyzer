@@ -4,6 +4,20 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
+## Unreleased
+
+For Eider 0.5.
+
+- Lints (eider-lang #113, #85; C8.56): the findings of `eiderc lint` for the open file's package
+  are published with the diagnostics, as warnings (errors for a denied lint) with the lint's name
+  as the code, and the quick fix offers the compiler's edit (for `unused_uses`, the `uses` clause
+  without the capability). They wait until the program has no errors.
+- Expansions (eider-lang #103, C8.57): the custom request `eider/expand` answers, for the symbol
+  at a position, with the specializations of reflective bodies (a `@derive`d method for a type)
+  as `[{"name", "text"}]`, the text being what `eiderc expand` prints; go to definition from a call
+  already leads to the trait's reflective body. Errors inside a specialization name it.
+- Severity follows the diagnostic (`Diag.sev`).
+
 ## 0.4.0
 
 For Eider 0.4 (`eider = "0.4"`): the language server keeps up with 0.4's language. Requires

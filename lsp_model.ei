@@ -41,9 +41,15 @@ pub type TypeAt = { span: Span, text: List[u8] }
 /// A machine-applicable fix: at (line, col) delete `delete` bytes and insert `insert`.
 pub type Fix = { line: u32, col: u32, delete: u64, insert: List[u8] }
 
-pub type Diag = { code: List[u8], file: u32, line: u32, col: u32, msg: List[u8], help: List[u8], fix: Option[Fix] }
+/// `sev` is the LSP severity: 1 error, 2 warning (a lint at level warn; compiler/lint.ei), 4 hint.
+pub type Diag = { code: List[u8], file: u32, line: u32, col: u32, msg: List[u8], help: List[u8], fix: Option[Fix], sev: u32 }
 
-pub type Analysis = { diags: List[Diag], symbols: List[Symbol], refs: List[Ref], types: List[TypeAt], files: List[List[u8]] }
+/// A specialization of a body that uses comptime reflection (compiler/ide.ei's Expansion): the
+/// instance's name, the position of the reflective declaration it came from, and its body
+/// as `eiderc expand` prints it.
+pub type Expansion = { name: List[u8], file: u32, line: u32, col: u32, text: List[u8] }
+
+pub type Analysis = { diags: List[Diag], symbols: List[Symbol], refs: List[Ref], types: List[TypeAt], files: List[List[u8]], expansions: List[Expansion] }
 
 /// Import forms (eider-lang compiler/parse.ei's IMPORT_*; docs/compiler.md, "C8.26"): the
 /// quoted `import "std/fs"` (deprecated), a dotted module path `import std.fs` (also one
@@ -63,7 +69,7 @@ pub const IM_IMPLIED: u32 = 3
 /// Import per member, with the same `stmt`.
 pub type Import = { form: u32, path: List[u8], alias: List[u8], name: Span, last: Span, stmt: Span }
 
-pub fn empty() -> Analysis { Analysis(List.new(), List.new(), List.new(), List.new(), List.new()) }
+pub fn empty() -> Analysis { Analysis(List.new(), List.new(), List.new(), List.new(), List.new(), List.new()) }
 
 pub fn span(file: u32, line: u32, col: u32, end_line: u32, end_col: u32) -> Span { Span(file, line, col, end_line, end_col) }
 

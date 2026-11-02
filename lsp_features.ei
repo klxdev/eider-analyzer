@@ -106,6 +106,31 @@ pub fn definition(r: Res, p: t.Pos) -> List[u8] {
     o
 }
 
+/// `eider/expand`: the specializations of reflective bodies for the symbol at the position,
+/// as `[{"name":..., "text":...}]`: the ones specialized from the declaration it is (or its
+/// calls resolve to), or, for a type, the ones for that type (`Point.enc`). The text is what
+/// `eiderc expand` prints (compiler/ide.ei's `Expansion`).
+pub fn expansions(r: Res, p: t.Pos) -> List[u8] {
+    let mut o = sys.lit("[")
+    let h = hit_at(r, p)
+    if h.found {
+        let s = r.an.symbols[h.sym as usize]
+        let mut pre = s.name.copy()
+        pre.push(46)
+        for x in r.an.expansions {
+            let from = x.file == s.span.file && x.line == s.span.line && x.col == s.span.col
+            if !from && !bytes.starts_with(x.name, pre) { continue }
+            rpc.sep(inout o)
+            o.push(123)
+            rpc.kv_str(inout o, "name", x.name)
+            rpc.kv_str(inout o, "text", x.text)
+            o.push(125)
+        }
+    }
+    o.push(93)
+    o
+}
+
 pub fn references(r: Res, p: t.Pos, include_decl: bool) -> List[u8] {
     let h = hit_at(r, p)
     if !h.found { return sys.lit("null") }
@@ -1205,7 +1230,7 @@ fn diag_json(inout o: List[u8], r: Res, d: m.Diag) {
     o.push(123)
     rpc.key(inout o, "range")
     diag_range(inout o, r, d.file, d.line, d.col)
-    rpc.kv_num(inout o, "severity", 1)
+    rpc.kv_num(inout o, "severity", d.sev as u64)
     rpc.kv_str(inout o, "code", d.code)
     rpc.kv_str(inout o, "source", sys.lit("eider"))
     let mut msg = d.msg.copy()

@@ -463,9 +463,9 @@ fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8])
         return rpc.result(id, sys.lit("null"))
     }
     let uri = uri_param(d, params)
-    let is_doc_request = bytes.starts_with(method, sys.lit("textDocument/"))
+    let is_doc_request = bytes.starts_with(method, sys.lit("textDocument/")) || is(method, "eider/expand")
     if !is_doc_request { return rpc.error(id, rpc.METHOD_NOT_FOUND, unknown(method)) }
-    let known = is(method, "textDocument/hover") || is(method, "textDocument/definition") || is(method, "textDocument/references") || is(method, "textDocument/documentSymbol") || is(method, "textDocument/foldingRange") || is(method, "textDocument/semanticTokens/full") || is(method, "textDocument/completion") || is(method, "textDocument/codeAction")
+    let known = is(method, "textDocument/hover") || is(method, "textDocument/definition") || is(method, "textDocument/references") || is(method, "textDocument/documentSymbol") || is(method, "textDocument/foldingRange") || is(method, "textDocument/semanticTokens/full") || is(method, "textDocument/completion") || is(method, "textDocument/codeAction") || is(method, "eider/expand")
     if !known { return rpc.error(id, rpc.METHOD_NOT_FOUND, unknown(method)) }
     if uri.len() == 0 { return rpc.error(id, rpc.INVALID_PARAMS, sys.lit("missing params.textDocument.uri")) }
     let res = match res_for(inout s, uri) {
@@ -478,6 +478,7 @@ fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8])
             return rpc.result(id, empty)
         }
     }
+    if is(method, "eider/expand") { return rpc.result(id, feat.expansions(res, pos_param(d, params))) }
     if is(method, "textDocument/hover") { return rpc.result(id, feat.hover(res, pos_param(d, params))) }
     if is(method, "textDocument/definition") { return rpc.result(id, feat.definition(res, pos_param(d, params))) }
     if is(method, "textDocument/references") {
