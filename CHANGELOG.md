@@ -6,6 +6,8 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 
 ## 0.3.0
 
+Floating point (eider-lang issue #43): the lexical stand-in reads a float literal (`lex.Float`) as one numeric token, so a buffer with `1.5` or `2e-3f32` keeps its outline and completion.
+
 For Eider 0.3 (`eider = "0.3"`): the language server keeps up with 0.3's language. Requires
 eider-json 0.3.0; every plain string literal in the analyzer interpolates (eider-lang U29).
 

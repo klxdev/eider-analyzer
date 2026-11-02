@@ -126,3 +126,12 @@ impl Source for Ones {
 }
 
 fn pulled[S: Source](s: S) -> Option[S.Item] { s.pull() }
+
+// eider-lang #43: floating point. Literals (a fraction, an exponent, a suffix), IEEE operators,
+// `as` conversions and `{x:.2}` give no diagnostics, and the lexical stand-in reads a float
+// literal as one token.
+fn mean(a: f64, b: f64) -> f64 { (a + b) * 0.5 }
+
+fn scaled(x: f32) -> f32 { x * 2.5f32 + 1e-3f32 }
+
+fn trunc(x: f64) -> i32 { (x * 1e3) as i32 }

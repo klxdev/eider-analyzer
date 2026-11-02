@@ -547,6 +547,8 @@ fn file_of(id: u32, src: List[u8], lx: lex.Lexed) -> standin.File {
                 sym = t.val as u32
             }
             lex.Int => { kind = standin.TK_INT }
+            // a float literal is a numeric literal to the stand-in too (eider-lang #43)
+            lex.Float => { kind = standin.TK_INT }
             lex.Newline => { kind = standin.TK_NL }
             lex.Eof => { kind = standin.TK_EOF }
             // an interpolating literal's text is a string to the stand-in, and its delimiters
