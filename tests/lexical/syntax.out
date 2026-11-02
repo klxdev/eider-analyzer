@@ -86,6 +86,16 @@ sym 82 local q 0:101:14-101:15 0:101:14-101:15 in 54 | q
 sym 83 local shown 0:105:9-105:14 0:105:9-105:14 in 54 | let shown
 sym 84 local raw 0:106:9-106:12 0:106:9-106:12 in 54 | let raw
 sym 85 local text 0:107:9-107:13 0:107:9-107:13 in 54 | let text
+sym 86 trait Source 0:116:7-116:13 0:116:1-119:2 in - | trait Source
+sym 87 type Item 0:117:10-117:14 0:117:5-117:14 in 86 | type Item
+sym 88 method pull 0:118:8-118:12 0:118:5-118:39 in 86 | fn pull(self) -> Option[Self.Item]
+sym 89 parameter self 0:118:13-118:17 0:118:13-118:17 in 88 | self
+sym 90 type Ones 0:121:6-121:10 0:121:1-121:23 in - | type Ones = { n: i32 }
+sym 91 field n 0:121:15-121:16 0:121:15-121:21 in 90 | n: i32
+sym 92 method pull 0:125:8-125:12 0:125:5-125:56 in 90 | fn pull(self) -> Option[Self.Item]
+sym 93 parameter self 0:125:13-125:17 0:125:13-125:17 in 92 | self
+sym 94 function pulled 0:128:4-128:10 0:128:1-128:58 in - | fn pulled[S: Source](s: S) -> Option[S.Item]
+sym 95 parameter s 0:128:22-128:23 0:128:22-128:23 in 94 | s: S
 ref 0:8:32-8:39 -> 28
 ref 0:12:18-12:22 -> 34
 ref 0:13:21-13:25 -> 34
@@ -165,6 +175,13 @@ ref 0:110:46-110:47 -> 68
 ref 0:110:56-110:61 -> 74
 ref 0:110:77-110:78 -> 75
 ref 0:111:11-111:15 -> 76
+ref 0:123:6-123:12 -> 86
+ref 0:123:17-123:21 -> 90
+ref 0:124:10-124:14 -> 87
+ref 0:125:47-125:51 -> 93
+ref 0:125:52-125:53 -> 91
+ref 0:128:14-128:20 -> 86
+ref 0:128:48-128:49 -> 95
 type 0:8:18-8:19 i32
 type 0:8:26-8:30 Handler
 type 0:8:41-8:44 Ref[List[i32]]
@@ -185,6 +202,10 @@ type 0:78:39-78:41 i32
 type 0:84:9-84:10 String
 type 0:86:9-86:13 Size
 type 0:96:13-96:18 Option[i32]
+type 0:118:13-118:17 Self
+type 0:121:15-121:16 i32
+type 0:125:13-125:17 Ones
+type 0:128:22-128:23 S
 type 0:19:45-19:50 i32
 type 0:23:8-23:9 i32
 type 0:23:27-23:28 i32
@@ -211,3 +232,6 @@ type 0:97:15-97:20 Option[i32]
 type 0:110:46-110:47 Ref
 type 0:110:77-110:78 String
 type 0:111:11-111:15 Size
+type 0:125:47-125:51 Ones
+type 0:125:52-125:53 i32
+type 0:128:48-128:49 S

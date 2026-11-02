@@ -110,3 +110,19 @@ fn main() uses io {
     print(total + a + bits(3) as i32 + old + r.get() + words.len() as i32 + s.len() as i32)
     print(size)
 }
+
+// C8.45: associated types: `type Item` in a trait, `type Item = i32` in an impl, `Self.Item` and
+// `S.Item` in types
+trait Source {
+    type Item
+    fn pull(self) -> Option[Self.Item]
+}
+
+type Ones = { n: i32 }
+
+impl Source for Ones {
+    type Item = i32
+    fn pull(self) -> Option[Self.Item] { Some(self.n) }
+}
+
+fn pulled[S: Source](s: S) -> Option[S.Item] { s.pull() }

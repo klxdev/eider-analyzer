@@ -415,7 +415,7 @@ fn decls(inout s: St) {
         let i = s.i.copy()
         let t = s.f.toks[i]
         if t.kind == TK_EOF { break }
-        let top = s.ctx[s.ctx.len() - 1]
+        let top = s.ctx[s.ctx.len() - 1].copy()
         if t.kind == TK_PUNCT && t.p == P_LBRACE {
             s.ctx.push(Ctx(C_BLOCK, top.owner, top.target, top.tname))
             s.i += 1
@@ -513,13 +513,17 @@ fn item(inout s: St) {
             break
         }
     }
-    let top = s.ctx[s.ctx.len() - 1]
+    let top = s.ctx[s.ctx.len() - 1].copy()
     // methods are reachable wherever their type is
     if top.kind != C_TOP { public = true }
     if is_kw(s, i, K_FN) {
         fn_item(inout s, start, i, public)
     } else if is_kw(s, i, K_TYPE) {
-        type_item(inout s, start, i, public)
+        if top.kind == C_TRAIT || top.kind == C_IMPL {
+            assoc_item(inout s, start, i, top)
+        } else {
+            type_item(inout s, start, i, public)
+        }
     } else if is_kw(s, i, K_CONST) {
         const_item(inout s, start, i, public)
     } else if is_kw(s, i, K_TRAIT) {
@@ -878,6 +882,22 @@ fn params(inout s: St, a: usize, b: usize, tname: u32) {
         }
         j += 1
     }
+}
+
+/// An associated type in a trait (`type Item`: a symbol of the trait) or an impl
+/// (`type Item = i32`: nothing of its own; the trait declares the name) (docs/compiler.md, "C8.45").
+fn assoc_item(inout s: St, start: usize, kw: usize, top: Ctx) {
+    if !is_name(s, kw + 1) {
+        s.i = kw + 1
+        return
+    }
+    let e = line_end_tok(s, kw)
+    if top.kind == C_TRAIT {
+        let full = range(s, start, e)
+        let d = flat(s, start, e)
+        add_sym(inout s, m.SK_TYPE, kw + 1, full, top.owner, d, List.new(), m.NONE, m.NONE, true)
+    }
+    s.i = e + 1
 }
 
 /// `type Name[G] = { fields }` or `= | V(fields) | ...`.

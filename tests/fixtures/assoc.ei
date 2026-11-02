@@ -1,0 +1,23 @@
+// associated types (eider-lang docs/compiler.md, "C8.45"; #107): no diagnostics, and the
+// outline has the trait's `type Item`
+trait Container {
+    type Item
+    fn get(self, i: usize) -> Self.Item
+}
+
+type Bag = { xs: List[i32] }
+
+impl Container for Bag {
+    type Item = i32
+    fn get(self, i: usize) -> Self.Item { self.xs[i] }
+}
+
+fn last[C: Container](c: C) -> C.Item { c.get(0) }
+
+fn main() uses io {
+    let mut xs: List[i32] = List.new()
+    xs.push(3)
+    let b = Bag(xs)
+    print(b.get(0))
+    print(last(b))
+}
