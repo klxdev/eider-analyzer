@@ -4,9 +4,21 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
-## 0.3.0
+## 0.4.0
 
-Floating point (eider-lang issue #43): the lexical stand-in reads a float literal (`lex.Float`) as one numeric token, so a buffer with `1.5` or `2e-3f32` keeps its outline and completion.
+For Eider 0.4 (`eider = "0.4"`): the language server keeps up with 0.4's language. Requires
+eider-json 0.4.0.
+
+- Floating point (eider-lang #43): the lexical stand-in reads a float literal (`lex.Float`) as one
+  numeric token, so a buffer with `1.5` or `2e-3f32` keeps its outline and completion.
+- Associated types (eider-lang #107, C8.45): the stand-in keeps a trait's `type Item` in the
+  outline and skips an impl's.
+- Capability polymorphism and `dyn Trait` (eider-lang #46, #18; C8.46, C8.47): the stand-in keeps
+  a fn type's `uses` in a parameter's type.
+- `is_enum_type` is in the completion list (eider-lang #99, C8.42), and dotted completion knows
+  `std.log`, `std.config` and `std.service` (eider-lang #24).
+
+## 0.3.0
 
 For Eider 0.3 (`eider = "0.3"`): the language server keeps up with 0.3's language. Requires
 eider-json 0.3.0; every plain string literal in the analyzer interpolates (eider-lang U29).
