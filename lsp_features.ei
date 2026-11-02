@@ -879,8 +879,8 @@ fn keywords() -> List[List[u8]] {
         "From", "Default",
         // C8.29: words at the start of a statement
         "defer", "errdefer",
-        // comptime reflection (eider-lang docs/compiler.md, "C8.41")
-        "fields", "variants", "has_attr"] { out.push(sys.lit(w)) }
+        // comptime reflection (eider-lang docs/compiler.md, "C8.41", "C8.42")
+        "fields", "variants", "has_attr", "is_enum_type"] { out.push(sys.lit(w)) }
     out
 }
 
