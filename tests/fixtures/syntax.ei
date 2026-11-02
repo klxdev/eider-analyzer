@@ -135,3 +135,12 @@ fn mean(a: f64, b: f64) -> f64 { (a + b) * 0.5 }
 fn scaled(x: f32) -> f32 { x * 2.5f32 + 1e-3f32 }
 
 fn trunc(x: f64) -> i32 { (x * 1e3) as i32 }
+
+// C8.46: capability polymorphism (`uses E`, the capabilities of fn types) and C8.47: `dyn Trait`
+fn each[uses E](f: fn() uses E, g: fn() uses io + clock) uses E { f() }
+
+trait Shape {
+    fn area(self) -> i64
+}
+
+fn total(shapes: List[dyn Shape], one: dyn Shape) -> i64 { one.area() }

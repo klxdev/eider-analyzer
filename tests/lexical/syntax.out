@@ -103,6 +103,15 @@ sym 99 function scaled 0:135:4-135:10 0:135:1-135:50 in - | fn scaled(x: f32) ->
 sym 100 parameter x 0:135:11-135:12 0:135:11-135:12 in 99 | x: f32
 sym 101 function trunc 0:137:4-137:9 0:137:1-137:45 in - | fn trunc(x: f64) -> i32
 sym 102 parameter x 0:137:10-137:11 0:137:10-137:11 in 101 | x: f64
+sym 103 function each 0:140:4-140:8 0:140:1-140:72 in - | fn each[uses E](f: fn() uses E, g: fn() uses io + clock) uses E
+sym 104 parameter f 0:140:17-140:18 0:140:17-140:18 in 103 | f: fn() uses E
+sym 105 parameter g 0:140:33-140:34 0:140:33-140:34 in 103 | g: fn() uses io + clock
+sym 106 trait Shape 0:142:7-142:12 0:142:1-144:2 in - | trait Shape
+sym 107 method area 0:143:8-143:12 0:143:5-143:25 in 106 | fn area(self) -> i64
+sym 108 parameter self 0:143:13-143:17 0:143:13-143:17 in 107 | self
+sym 109 function total 0:146:4-146:9 0:146:1-146:72 in - | fn total(shapes: List[dyn Shape], one: dyn Shape) -> i64
+sym 110 parameter shapes 0:146:10-146:16 0:146:10-146:16 in 109 | shapes: List[dyn Shape]
+sym 111 parameter one 0:146:35-146:38 0:146:35-146:38 in 109 | one: dyn Shape
 ref 0:8:32-8:39 -> 28
 ref 0:12:18-12:22 -> 34
 ref 0:13:21-13:25 -> 34
@@ -193,6 +202,11 @@ ref 0:133:35-133:36 -> 97
 ref 0:133:39-133:40 -> 98
 ref 0:135:28-135:29 -> 100
 ref 0:137:28-137:29 -> 102
+ref 0:140:67-140:68 -> 104
+ref 0:146:27-146:32 -> 106
+ref 0:146:44-146:49 -> 106
+ref 0:146:60-146:63 -> 111
+ref 0:146:64-146:68 -> 107
 type 0:8:18-8:19 i32
 type 0:8:26-8:30 Handler
 type 0:8:41-8:44 Ref[List[i32]]
@@ -221,6 +235,11 @@ type 0:133:9-133:10 f64
 type 0:133:17-133:18 f64
 type 0:135:11-135:12 f32
 type 0:137:10-137:11 f64
+type 0:140:17-140:18 fn() uses E
+type 0:140:33-140:34 fn() uses io + clock
+type 0:143:13-143:17 Self
+type 0:146:10-146:16 List[dyn Shape]
+type 0:146:35-146:38 dyn Shape
 type 0:19:45-19:50 i32
 type 0:23:8-23:9 i32
 type 0:23:27-23:28 i32
@@ -254,3 +273,5 @@ type 0:133:35-133:36 f64
 type 0:133:39-133:40 f64
 type 0:135:28-135:29 f32
 type 0:137:28-137:29 f64
+type 0:140:67-140:68 fn() uses E
+type 0:146:60-146:63 dyn Shape

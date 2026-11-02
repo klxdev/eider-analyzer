@@ -81,6 +81,7 @@ const P_COMMA: u32 = 44
 const P_DOT: u32 = 46
 const P_PIPE: u32 = 124
 const P_EQ: u32 = 61
+const P_PLUS: u32 = 43
 const P_ARROW: u32 = 11582
 const P_FATARROW: u32 = 15678
 
@@ -851,6 +852,22 @@ fn fn_item(inout s: St, start: usize, kw: usize, public: bool) {
     s.i = header_end + 1
 }
 
+/// A parameter type ending at token `e` extended over the capabilities of a fn type
+/// (`f: fn() uses io + clock`; `type_end` stops at `uses`, which also starts a declaration's
+/// own list; docs/compiler.md, "C8.46").
+fn uses_tail(s: St, e: usize) -> usize {
+    let mut j = e + 1
+    if !is_kw(s, j, K_USES) { return e }
+    let mut last = j.copy()
+    j += 1
+    while is_name(s, j) {
+        last = j.copy()
+        j += 1
+        if is_p(s, j, P_PLUS) { j += 1 } else { break }
+    }
+    last
+}
+
 /// Parameters between the parens at `a` and `b`: `[inout] name: T` or `self`.
 fn params(inout s: St, a: usize, b: usize, tname: u32) {
     let mut j = a + 1
@@ -860,7 +877,7 @@ fn params(inout s: St, a: usize, b: usize, tname: u32) {
         let mut k = j.copy()
         if is_kw(s, k, K_INOUT) { k += 1 }
         if is_name(s, k) && is_p(s, k + 1, P_COLON) {
-            let e = type_end(s, k + 2)
+            let e = uses_tail(s, type_end(s, k + 2))
             let d = flat(s, j, e)
             let ty = text(s, k + 2, e)
             let tn = head_of(s, k + 2, e)
