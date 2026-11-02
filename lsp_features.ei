@@ -1144,13 +1144,15 @@ fn type_head(ty: List[u8]) -> List[u8] {
 fn builtin_methods(head: List[u8]) -> List[List[u8]] {
     let mut out: List[List[u8]] = List.new()
     if bytes.eq(head, sys.lit("List")) {
-        for w in ["len", "push", "pop", "contains", "is_empty", "clear", "get", "sum", "map", "filter", "for_each", "any", "all", "fold", "new"] { out.push(sys.lit(w)) }
+        // the in-place operations and slice/filled: eider-lang docs/compiler.md, "C8.49"
+        for w in ["len", "push", "pop", "contains", "is_empty", "clear", "get", "sum", "map", "filter", "for_each", "any", "all", "fold", "new", "insert", "remove", "truncate", "extend", "swap", "remove_range", "slice", "filled"] { out.push(sys.lit(w)) }
     } else if bytes.eq(head, sys.lit("String")) {
         for w in ["len", "is_empty", "push_str", "push_byte", "append", "byte", "slice", "bytes", "from", "from_int", "from_bytes", "new"] { out.push(sys.lit(w)) }
     } else if bytes.eq(head, sys.lit("str")) {
         for w in ["len", "is_empty", "byte", "slice", "bytes"] { out.push(sys.lit(w)) }
     } else if bytes.eq(head, sys.lit("Map")) {
-        for w in ["insert", "get", "remove", "contains", "len", "is_empty", "keys", "values", "entries", "new"] { out.push(sys.lit(w)) }
+        // `deterministic`: the fixed-seed hasher (docs/decisions.md C805)
+        for w in ["insert", "get", "remove", "contains", "len", "is_empty", "keys", "values", "entries", "new", "deterministic"] { out.push(sys.lit(w)) }
     } else if bytes.eq(head, sys.lit("Option")) {
         for w in ["is_some", "is_none", "unwrap", "unwrap_or", "map", "and_then", "ok_or"] { out.push(sys.lit(w)) }
     } else if bytes.eq(head, sys.lit("Result")) {
@@ -1165,7 +1167,8 @@ fn builtin_methods(head: List[u8]) -> List[List[u8]] {
     } else if bytes.eq(head, sys.lit("Chan")) {
         for w in ["send", "recv", "close", "new"] { out.push(sys.lit(w)) }
     } else if bytes.eq(head, sys.lit("Task")) {
-        for w in ["join"] { out.push(sys.lit(w)) }
+        // `catch`: Task.catch(f) contains a trap (docs/compiler.md, "C8.51")
+        for w in ["join", "catch"] { out.push(sys.lit(w)) }
     }
     for w in ["copy", "eq", "compare", "hash", "show", "to_string", "take", "replace"] { out.push(sys.lit(w)) }
     out
