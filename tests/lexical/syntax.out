@@ -96,6 +96,15 @@ sym 92 method pull 0:125:8-125:12 0:125:5-125:56 in 90 | fn pull(self) -> Option
 sym 93 parameter self 0:125:13-125:17 0:125:13-125:17 in 92 | self
 sym 94 function pulled 0:128:4-128:10 0:128:1-128:58 in - | fn pulled[S: Source](s: S) -> Option[S.Item]
 sym 95 parameter s 0:128:22-128:23 0:128:22-128:23 in 94 | s: S
+sym 96 function each 0:131:4-131:8 0:131:1-131:72 in - | fn each[uses E](f: fn() uses E, g: fn() uses io + clock) uses E
+sym 97 parameter f 0:131:17-131:18 0:131:17-131:18 in 96 | f: fn() uses E
+sym 98 parameter g 0:131:33-131:34 0:131:33-131:34 in 96 | g: fn() uses io + clock
+sym 99 trait Shape 0:133:7-133:12 0:133:1-135:2 in - | trait Shape
+sym 100 method area 0:134:8-134:12 0:134:5-134:25 in 99 | fn area(self) -> i64
+sym 101 parameter self 0:134:13-134:17 0:134:13-134:17 in 100 | self
+sym 102 function total 0:137:4-137:9 0:137:1-137:72 in - | fn total(shapes: List[dyn Shape], one: dyn Shape) -> i64
+sym 103 parameter shapes 0:137:10-137:16 0:137:10-137:16 in 102 | shapes: List[dyn Shape]
+sym 104 parameter one 0:137:35-137:38 0:137:35-137:38 in 102 | one: dyn Shape
 ref 0:8:32-8:39 -> 28
 ref 0:12:18-12:22 -> 34
 ref 0:13:21-13:25 -> 34
@@ -182,6 +191,11 @@ ref 0:125:47-125:51 -> 93
 ref 0:125:52-125:53 -> 91
 ref 0:128:14-128:20 -> 86
 ref 0:128:48-128:49 -> 95
+ref 0:131:67-131:68 -> 97
+ref 0:137:27-137:32 -> 99
+ref 0:137:44-137:49 -> 99
+ref 0:137:60-137:63 -> 104
+ref 0:137:64-137:68 -> 100
 type 0:8:18-8:19 i32
 type 0:8:26-8:30 Handler
 type 0:8:41-8:44 Ref[List[i32]]
@@ -206,6 +220,11 @@ type 0:118:13-118:17 Self
 type 0:121:15-121:16 i32
 type 0:125:13-125:17 Ones
 type 0:128:22-128:23 S
+type 0:131:17-131:18 fn() uses E
+type 0:131:33-131:34 fn() uses io + clock
+type 0:134:13-134:17 Self
+type 0:137:10-137:16 List[dyn Shape]
+type 0:137:35-137:38 dyn Shape
 type 0:19:45-19:50 i32
 type 0:23:8-23:9 i32
 type 0:23:27-23:28 i32
@@ -235,3 +254,5 @@ type 0:111:11-111:15 Size
 type 0:125:47-125:51 Ones
 type 0:125:52-125:53 i32
 type 0:128:48-128:49 S
+type 0:131:67-131:68 fn() uses E
+type 0:137:60-137:63 dyn Shape

@@ -126,3 +126,12 @@ impl Source for Ones {
 }
 
 fn pulled[S: Source](s: S) -> Option[S.Item] { s.pull() }
+
+// C8.46: capability polymorphism (`uses E`, the capabilities of fn types) and C8.47: `dyn Trait`
+fn each[uses E](f: fn() uses E, g: fn() uses io + clock) uses E { f() }
+
+trait Shape {
+    fn area(self) -> i64
+}
+
+fn total(shapes: List[dyn Shape], one: dyn Shape) -> i64 { one.area() }
