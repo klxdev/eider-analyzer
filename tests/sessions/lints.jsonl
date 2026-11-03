@@ -3,11 +3,11 @@
 # `eider/expand` answers with the specializations of a reflective body (docs/compiler.md, "C8.57")
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
 {"jsonrpc":"2.0","method":"initialized","params":{}}
-{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/lints.ei","languageId":"eider","version":1,"text":"@[derive]\ntrait Enc {\n    fn enc(self, inout out: String) {\n        comptime for f in fields(Self) {\n            self.[f].enc(inout out)\n        }\n    }\n}\n\nimpl Enc for i64 {\n    fn enc(self, inout out: String) { out.append(String.from_int(self)) }\n}\n\ntype Point = { x: i64, y: i64 }\n\nfn quiet() uses io, clock { print(1) }\n\nfn main() uses io, clock {\n    let mut s = String.from(\"\")\n    Point(1, 2).enc(inout s)\n    quiet()\n    print(s)\n}\n"}}}
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/lints.ei","languageId":"eider","version":1,"text":"@[derive]\ntrait Enc {\n    fn enc(self, inout out: String) {\n        comptime for f in fields(Self) {\n            self.[f].enc(inout out)\n        }\n    }\n}\n\nimpl Enc for i64 {\n    fn enc(self, inout out: String) { out.append(String.from_int(self)) }\n}\n\n@[derive(Enc)] type Point = { x: i64, y: i64 }\n\nfn quiet() uses io, clock { print(1) }\n\nfn main() uses io, clock {\n    let mut s = String.from(\"\")\n    Point(1, 2).enc(inout s)\n    quiet()\n    print(s)\n}\n"}}}
 # the quick fix of the unused `clock` on line 16 (0-based 15)
 {"jsonrpc":"2.0","id":2,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/lints.ei"},"range":{"start":{"line":15,"character":0},"end":{"line":15,"character":0}},"context":{"diagnostics":[]}}}
 # the specializations of `enc`: on the trait's method name, and on the type `Point`
 {"jsonrpc":"2.0","id":3,"method":"eider/expand","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/lints.ei"},"position":{"line":2,"character":8}}}
-{"jsonrpc":"2.0","id":4,"method":"eider/expand","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/lints.ei"},"position":{"line":13,"character":6}}}
+{"jsonrpc":"2.0","id":4,"method":"eider/expand","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/lints.ei"},"position":{"line":13,"character":21}}}
 {"jsonrpc":"2.0","id":99,"method":"shutdown"}
 {"jsonrpc":"2.0","method":"exit"}
