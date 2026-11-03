@@ -689,7 +689,7 @@ pub fn completion(r: Res, path: List[u8], text: List[u8], starts: List[u32], p: 
     let pc = path_context(text, a)
     let an = attr_context(text, a)
     if an.len() > 0 {
-        // a key of an attribute (eider-lang docs/compiler.md, "C8.40"): `@json(na|`
+        // a key of an attribute (eider-lang docs/compiler.md, "C8.40"): `@[json(na|`
         attr_keys(inout o, inout seen, r, an, prefix)
     } else if pc.found {
         // a module path: after `import `, `import a.`, or in a group's `{ }`
@@ -751,9 +751,36 @@ pub fn completion(r: Res, path: List[u8], text: List[u8], starts: List[u32], p: 
     o
 }
 
+/// Whether an attribute's name starts at offset `k`: right after `@[`, or after a `,` of the
+/// group `@[a(...), |` (docs/compiler.md, "C8.60").
+fn in_group_head(text: List[u8], k: usize) -> bool {
+    let mut j = k.copy()
+    while j > 0 && (text[j - 1] == 32 || text[j - 1] == 9 || text[j - 1] == 10 || text[j - 1] == 13) { j -= 1 }
+    if j == 0 { return false }
+    if text[j - 1] == 91 { return j > 1 && text[j - 2] == 64 }
+    if text[j - 1] != 44 { return false }
+    // back over the earlier members of the group to its `@[`
+    let mut depth: u32 = 0
+    j -= 1
+    while j > 0 {
+        let ch = text[j - 1]
+        if ch == 41 { depth += 1 }
+        if ch == 40 {
+            if depth == 0 { return false }
+            depth -= 1
+        }
+        if depth == 0 {
+            if ch == 91 { return j > 1 && text[j - 2] == 64 }
+            if ch == 93 || ch == 123 || ch == 125 || ch == 59 { return false }
+        }
+        j -= 1
+    }
+    false
+}
+
 /// When offset `a` (the start of the identifier being typed) is where a key of an attribute
-/// goes, `@name(` or `@alias.name(` then keys and values up to a `,`: the attribute's name,
-/// else empty.
+/// goes, `@[name(` or `@[alias.name(` (or after a `,` of the group) then keys and values up to
+/// a `,`: the attribute's name, else empty.
 fn attr_context(text: List[u8], a: usize) -> List[u8] {
     let none: List[u8] = List.new()
     let mut j = a.copy()
@@ -777,12 +804,12 @@ fn attr_context(text: List[u8], a: usize) -> List[u8] {
     while b > 0 && bytes.is_ident(text[b - 1]) { b -= 1 }
     if b == close { return none }
     let name = bytes.slice(text, b, close)
-    // `@name(` or `@alias.name(`
-    if b > 0 && text[b - 1] == 64 { return name }
+    // `name(` or `alias.name(` at the head of a member of an `@[...]` group
+    if in_group_head(text, b) { return name }
     if b > 1 && text[b - 1] == 46 {
         let mut c = b - 1
         while c > 0 && bytes.is_ident(text[c - 1]) { c -= 1 }
-        if c > 0 && c < b - 1 && text[c - 1] == 64 { return name }
+        if c < b - 1 && in_group_head(text, c) { return name }
     }
     none
 }

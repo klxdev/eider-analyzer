@@ -4,6 +4,12 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
+## Unreleased (for Eider 0.6)
+
+- Attributes are written `@[a, b(key = value)]` (eider-lang #155, C8.60): the front end parses the
+  group, and completion of an attribute's keys works inside one (after `@[json(` and after the `,`
+  of a group). Sessions follow.
+
 ## 0.5.0
 
 For Eider 0.5 (`eider = "0.5"`). Requires eider-json 0.5.0.
