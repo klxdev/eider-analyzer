@@ -8,7 +8,7 @@
     {
       "name": "eider-lsp",
       "description": "Eider language server (eider-analyzer): diagnostics, definition, references, hover for .ei files",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "source": "./editors/claude-code",
       "category": "development",
       "strict": false,

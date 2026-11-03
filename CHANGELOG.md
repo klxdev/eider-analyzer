@@ -4,9 +4,9 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
-## Unreleased
+## 0.5.0
 
-For Eider 0.5.
+For Eider 0.5 (`eider = "0.5"`). Requires eider-json 0.5.0.
 
 - Lints (eider-lang #113, #85; C8.56): the findings of `eiderc lint` for the open file's package
   are published with the diagnostics, as warnings (errors for a denied lint) with the lint's name
