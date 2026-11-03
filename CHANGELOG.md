@@ -9,6 +9,9 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 - Attributes are written `@[a, b(key = value)]` (eider-lang #155, C8.60): the front end parses the
   group, and completion of an attribute's keys works inside one (after `@[json(` and after the `,`
   of a group). Sessions follow.
+- The keys of an `attr` declaration may carry attributes (`@[names_module] with: str = ""`, eider-lang
+  #164, C8.63); completion of `std.` lists the new `std.validate` (#101). Locked to the eider-json that
+  follows std/serial of 0.6.
 
 ## 0.5.0
 
