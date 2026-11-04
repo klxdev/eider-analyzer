@@ -1,0 +1,11 @@
+# let ... else (eider-lang docs/compiler.md, "C8.71"; fixtures/let_else.ei): the names the
+# pattern binds are definitions that scope over the rest of the block (definition, hover,
+# references), and an else block that can fall through is E0120
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/let_else.ei 1
+{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/let_else.ei"},"position":{"line":4,"character":4}}}
+{"jsonrpc":"2.0","id":3,"method":"textDocument/references","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/let_else.ei"},"position":{"line":3,"character":13},"context":{"includeDeclaration":true}}}
+{"jsonrpc":"2.0","id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/let_else.ei"},"position":{"line":4,"character":4}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

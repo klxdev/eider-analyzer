@@ -6,6 +6,8 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 
 ## Unreleased (for Eider 0.7)
 
+- `let PATTERN = e else { ... }` (eider-lang #106, C8.71): the front end folds it into a match, so the
+  bound names are definitions over the rest of the block and E0120 is reported (session `let_else`).
 - Type arguments at a call, `decode[Order](s)` (eider-lang #149, C8.66), and a binding's type through
   `?`: the compiler's front end provides them (references, definition and hover on the type named
   in the brackets; session `type_args`). Errors in a `test` block now name their own file (#162).

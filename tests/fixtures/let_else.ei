@@ -1,0 +1,11 @@
+fn pos(n: i32) -> Option[i32] { if n > 0 { Some(n) } else { None } }
+
+fn twice(n: i32) -> i32 {
+    let Some(v) = pos(n) else { return 0 }
+    v * 2
+}
+
+fn main() uses io {
+    let Some(w) = pos(3) else { print("none") }
+    print(twice(w))
+}
