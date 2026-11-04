@@ -1,7 +1,7 @@
 [package]
 name = "eider_analyzer"
-version = "0.6.0"
-eider = "0.6"
+version = "0.7.0"
+eider = "0.7"
 main = "lsp_main.ei"
 description = "eider-analyzer: a language server (LSP 3.17) for Eider, written in Eider"
 
@@ -11,7 +11,7 @@ description = "eider-analyzer: a language server (LSP 3.17) for Eider, written i
 # (EIDER_PKG_OVERRIDE: ../eider-json, else the toolchain's pinned copy .vendor/json).
 [deps.json]
 git = "https://github.com/klxdev/eider-json.git"
-version = "0.6.0"
+version = "0.7.0"
 
 # The compiler package (the toolchain's compiler/): lexer, parser, checker, diagnostics.
 # Only lsp_analysis.ei imports it. target/toolchain is the toolchain scripts/build.sh found

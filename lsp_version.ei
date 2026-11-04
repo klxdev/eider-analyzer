@@ -6,4 +6,4 @@
 // writes VERSION into the others (eider-lang's scripts/version.sh bump runs it).
 
 /// eider-analyzer's version, MAJOR.MINOR.PATCH.
-pub const VERSION: str = "0.6.0"
+pub const VERSION: str = "0.7.0"

@@ -4,7 +4,13 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
-## Unreleased (for Eider 0.7)
+## 0.7.0
+
+For Eider 0.7 (`eider = "0.7"`). Requires eider-json 0.7.0. The analyzer follows the language changes of 0.7
+(named and default arguments, `List[...]` literals, `let ... else`, type arguments at a call, `if`/`match` as call
+arguments) and gains `textDocument/formatting` and the Eider-source `eider/expand`.
+
+Not in 0.7.0: the rest of eider-lang #150 (rename, workspace symbols, signature help, inlay hints).
 
 - Named arguments and default arguments (eider-lang #110, C8.81): the name in `retries = 3` is a reference to its
   parameter (definition, references, hover), the constant a default names is one too; session `named_args`.
