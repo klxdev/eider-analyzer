@@ -1,0 +1,10 @@
+const WAIT: i64 = 5
+
+fn connect(host: str, port: i64 = 80, wait: i64 = WAIT) -> i64 {
+    port + wait
+}
+
+fn main() uses io {
+    print(connect("a", wait = 1))
+    print(connect(host = "b", port = 2, retries = 3))
+}

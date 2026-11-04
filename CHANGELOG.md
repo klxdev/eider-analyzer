@@ -6,6 +6,9 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 
 ## Unreleased (for Eider 0.7)
 
+- Named arguments and default arguments (eider-lang #110, C8.81): the name in `retries = 3` is a reference to its
+  parameter (definition, references, hover), the constant a default names is one too; session `named_args`.
+
 - `eider/expand` returns the specialization as Eider source with the requesting call (eider-lang #159, C8.76),
   not IR (session `lints`).
 

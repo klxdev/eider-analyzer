@@ -1,0 +1,11 @@
+# Named arguments and default arguments (eider-lang docs/compiler.md, "C8.81"; fixtures/named_args.ei):
+# the name of a named argument is a reference to its parameter (definition, references), the constant a
+# default names is a reference too, and a name that is no parameter is E0121
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/named_args.ei 1
+{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/named_args.ei"},"position":{"line":7,"character":24}}}
+{"jsonrpc":"2.0","id":3,"method":"textDocument/references","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/named_args.ei"},"position":{"line":2,"character":39},"context":{"includeDeclaration":true}}}
+{"jsonrpc":"2.0","id":4,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/named_args.ei"},"position":{"line":2,"character":51}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}
