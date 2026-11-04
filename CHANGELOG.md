@@ -6,6 +6,9 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 
 ## Unreleased (for Eider 0.7)
 
+- `eider/expand` returns the specialization as Eider source with the requesting call (eider-lang #159, C8.76),
+  not IR (session `lints`).
+
 - `textDocument/formatting` (eider-lang #150): the canonical layout of `eiderc fmt`, one edit over the whole
   buffer, multi-line strings included (session `format`).
 

@@ -11,7 +11,7 @@ the compiler's.
 |---|---|
 | `publishDiagnostics` | the compiler's diagnostic (code, message, `help:` line), for the open file and for an imported module the error is in; E0112 "no `main`" only for the package's main file (eider.toml `main`) |
 | `codeAction` (quickfix) | the compiler's machine-applicable fix as an edit (also for lints) |
-| `eider/expand` (custom) | the specializations of reflective bodies for the symbol at a position: `[{name, text}]` (`eiderc expand`) |
+| `eider/expand` (custom) | the specializations of reflective bodies for the symbol at a position: `[{name, text}]`, the text as Eider source under a comment naming the call that asked for it (`eiderc expand`) |
 | `documentSymbol` | hierarchical: types with their fields/variants and methods, variants with their fields, functions (with their loop labels, `outer: for`), constants, traits, tests |
 | `definition`, `references` | every name the checker resolved: locals, parameters, items, fields, methods, variants, module aliases, across modules; an import's last path segment and its alias (`sys` of `import core.sys`, `fs` and `files` of `import std.{fs as files}`) and the module segment of a namespace use (`bytes` of `std.bytes.eq`) go to the module's file |
 | `hover` | the symbol's signature or type, what it is and where, and the checker's type at the cursor; a type alias shows its target (`type Handler = fn(Request) -> Response`); a module its dotted name (`module std.bytes`), a package namespace (`std` of `import std`) what it is; prelude items the checker records no reference for (`From` in `impl From[E] for T`) and built-in types (`Ref`, `List`, `Map`, ...) get their declaration or a short description |
