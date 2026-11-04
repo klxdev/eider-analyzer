@@ -3,15 +3,15 @@ version = 1
 
 [[package]]
 name = "eiderc"
-version = "0.5.0"
+version = "0.6.0"
 source = "path+target/toolchain/compiler"
 deps = []
 grants = ["io", "fs", "net", "clock"]
 
 [[package]]
 name = "json"
-version = "0.5.0"
-source = "git+https://github.com/klxdev/eider-json.git#8b799ffb81371eb17f847b1aad21f72c93342018"
-hash = "sha256-12f5f81f7095500f66c9e064867454e13d8a93ff3c9ac77a45e11f7ef18f8c27"
+version = "0.6.0"
+source = "git+https://github.com/klxdev/eider-json.git#5348222fc87db6748b96ff34d7062a9c334c43a9"
+hash = "sha256-584e9baf7635dc55106415fe2280caa0093cec6b6705fb31293529588730d4fc"
 deps = []
 grants = []
