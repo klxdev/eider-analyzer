@@ -1,0 +1,20 @@
+type Order = { id: i32 }
+
+impl Default for Order {
+    fn default() -> Order { Order(1) }
+}
+
+fn decode[T: Default](ok: bool) -> Result[T, String] {
+    if ok { Ok(T.default()) } else { Err("no".to_string()) }
+}
+
+fn load() -> Result[i32, String] {
+    let o = decode[Order](true)?
+    let n: i32 = decode(true)?
+    Ok(o.id + n)
+}
+
+fn main() uses io {
+    let bad = decode[Order, i32](true)
+    print(load())
+}

@@ -4,6 +4,12 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
+## Unreleased (for Eider 0.7)
+
+- Type arguments at a call, `decode[Order](s)` (eider-lang #149, C8.66), and a binding's type through
+  `?`: the compiler's front end provides them (references, definition and hover on the type named
+  in the brackets; session `type_args`). Errors in a `test` block now name their own file (#162).
+
 ## 0.6.0
 
 For Eider 0.6 (`eider = "0.6"`). Requires eider-json 0.6.0.
