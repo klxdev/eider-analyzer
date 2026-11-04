@@ -1,0 +1,14 @@
+# textDocument/formatting (eider-lang docs/site/tooling/compiler.md, "Formatting"): `eiderc fmt's layout
+# as one edit over the whole buffer (CRLF, tabs, a multi-line string kept as it is), [] for a
+# formatted buffer, null for one that does not lex, [] for a document that is not open
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/format_messy.ei 1
+!open fixtures/format_clean.ei 1
+!open fixtures/format_nolex.ei 1
+{"jsonrpc":"2.0","id":2,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/format_messy.ei"},"options":{"tabSize":4,"insertSpaces":true}}}
+{"jsonrpc":"2.0","id":3,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/format_clean.ei"},"options":{"tabSize":4,"insertSpaces":true}}}
+{"jsonrpc":"2.0","id":4,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/format_nolex.ei"},"options":{"tabSize":4,"insertSpaces":true}}}
+{"jsonrpc":"2.0","id":5,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/never_opened.ei"},"options":{}}}
+{"jsonrpc":"2.0","id":6,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

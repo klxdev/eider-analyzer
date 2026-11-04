@@ -6,6 +6,9 @@ compatibility. The release process is eider-lang's `docs/site/tooling/releases.m
 
 ## Unreleased (for Eider 0.7)
 
+- `textDocument/formatting` (eider-lang #150): the canonical layout of `eiderc fmt`, one edit over the whole
+  buffer, multi-line strings included (session `format`).
+
 - List literals `List[a, b]` (eider-lang #49, C8.73) and an `if`/`match` as a call argument (#48, C8.72): the
   front end provides them (session `list_literal`: definitions and hover inside the elements, no E0103).
 - `let PATTERN = e else { ... }` (eider-lang #106, C8.71): the front end folds it into a match, so the

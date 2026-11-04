@@ -1354,3 +1354,22 @@ pub fn code_actions(r: Res, first_line: u32, last_line: u32) -> List[u8] {
     o.push(93)
     o
 }
+
+// ---- formatting
+
+/// `textDocument/formatting`: `eiderc fmt`'s canonical layout (compiler/fmt.ei) of the buffer
+/// as one edit replacing the whole text, `[]` when it is already formatted and `null` when
+/// the compiler refuses the buffer (it does not lex).
+pub fn formatting(text: List[u8], starts: List[u32]) -> List[u8] {
+    let formatted = match analysis.format(text) {
+        Some(f) => f
+        None => { return sys.lit("null") }
+    }
+    if bytes.eq(formatted, text) { return sys.lit("[]") }
+    let mut o = sys.lit("[{{\"range\":{{\"start\":{{\"line\":0,\"character\":0}},\"end\":")
+    pos_json(inout o, t.pos_of_offset(text, starts, text.len()))
+    bytes.append(inout o, sys.lit("}},\"newText\":"))
+    json.quote_into(inout o, formatted)
+    bytes.append(inout o, sys.lit("}}]"))
+    o
+}

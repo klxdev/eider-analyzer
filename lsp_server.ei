@@ -465,9 +465,16 @@ fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8])
     let uri = uri_param(d, params)
     let is_doc_request = bytes.starts_with(method, sys.lit("textDocument/")) || is(method, "eider/expand")
     if !is_doc_request { return rpc.error(id, rpc.METHOD_NOT_FOUND, unknown(method)) }
-    let known = is(method, "textDocument/hover") || is(method, "textDocument/definition") || is(method, "textDocument/references") || is(method, "textDocument/documentSymbol") || is(method, "textDocument/foldingRange") || is(method, "textDocument/semanticTokens/full") || is(method, "textDocument/completion") || is(method, "textDocument/codeAction") || is(method, "eider/expand")
+    let known = is(method, "textDocument/hover") || is(method, "textDocument/definition") || is(method, "textDocument/references") || is(method, "textDocument/documentSymbol") || is(method, "textDocument/foldingRange") || is(method, "textDocument/semanticTokens/full") || is(method, "textDocument/completion") || is(method, "textDocument/codeAction") || is(method, "textDocument/formatting") || is(method, "eider/expand")
     if !known { return rpc.error(id, rpc.METHOD_NOT_FOUND, unknown(method)) }
     if uri.len() == 0 { return rpc.error(id, rpc.INVALID_PARAMS, sys.lit("missing params.textDocument.uri")) }
+    if is(method, "textDocument/formatting") {
+        // only the text of the buffer matters: no analysis
+        let i = find_doc(s, uri)
+        if i == NONE { return rpc.result(id, sys.lit("[]")) }
+        let doc = s.docs[i as usize]
+        return rpc.result(id, feat.formatting(doc.text, doc.starts))
+    }
     let res = match res_for(inout s, uri) {
         Some(r) => r
         None => {
@@ -524,7 +531,7 @@ fn capabilities() -> List[u8] {
     bytes.append(inout o, sys.lit("\"positionEncoding\":\"utf-16\","))
     bytes.append(inout o, sys.lit("\"textDocumentSync\":{{\"openClose\":true,\"change\":1,\"save\":{{\"includeText\":false}}}},"))
     bytes.append(inout o, sys.lit("\"hoverProvider\":true,\"definitionProvider\":true,\"referencesProvider\":true,"))
-    bytes.append(inout o, sys.lit("\"documentSymbolProvider\":true,\"foldingRangeProvider\":true,"))
+    bytes.append(inout o, sys.lit("\"documentSymbolProvider\":true,\"documentFormattingProvider\":true,\"foldingRangeProvider\":true,"))
     bytes.append(inout o, sys.lit("\"codeActionProvider\":{{\"codeActionKinds\":[\"quickfix\"]}},"))
     bytes.append(inout o, sys.lit("\"completionProvider\":{{\"triggerCharacters\":[\".\"]}},"))
     bytes.append(inout o, sys.lit("\"semanticTokensProvider\":{{\"legend\":"))

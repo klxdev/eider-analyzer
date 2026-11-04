@@ -24,6 +24,7 @@ import eiderc.lock
 import eiderc.resolve
 import eiderc.diag
 import eiderc.ide
+import eiderc.fmt
 import eiderc.lint
 import eider_analyzer.lsp_model as m
 import eider_analyzer.lsp_standin as standin
@@ -697,4 +698,11 @@ fn lexical(inout a: m.Analysis, path: List[u8], src: List[u8], overlay_paths: Li
         if t != m.NONE { a.refs.push(m.Ref(r.span, t)) }
     }
     a.types = out.types
+}
+
+/// `eiderc fmt`: the canonical layout of `text` (compiler/fmt.ei), or None when the compiler
+/// refuses it (it does not lex).
+pub fn format(text: List[u8]) -> Option[List[u8]] {
+    let f = fmt.format(text)
+    if f.ok { Some(f.text) } else { None }
 }

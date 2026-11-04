@@ -1,0 +1,9 @@
+import core.sys
+
+
+fn greet(name: str) -> String {
+  let text = """
+      Hello,   {name}
+    """
+	text   
+}
