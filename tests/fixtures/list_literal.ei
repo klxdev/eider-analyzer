@@ -1,0 +1,15 @@
+type Tag = { name: String }
+
+fn total(xs: List[i32]) -> i32 {
+    let mut t = 0
+    for x in xs { t += x }
+    t
+}
+
+fn main() uses io {
+    let base = 10
+    let xs = List[base, 2, if base > 5 { base } else { 0 }]
+    print(total(xs))
+    let tags: List[Tag] = List[Tag("a".to_string())]
+    let bad = List[]
+}
