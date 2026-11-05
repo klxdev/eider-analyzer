@@ -1,0 +1,12 @@
+# type arguments on method calls, `x.f[T]()` and `Type.f[A, B]()` (eider-lang docs/compiler.md,
+# "C8.83"; fixtures/method_type_args.ei): the types named are references to the types (definition,
+# references), the result types through the call, and too many type arguments are E0405
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/method_type_args.ei 1
+{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/method_type_args.ei"},"position":{"line":20,"character":21}}}
+{"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/method_type_args.ei"},"position":{"line":21,"character":38}}}
+{"jsonrpc":"2.0","id":4,"method":"textDocument/references","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/method_type_args.ei"},"position":{"line":0,"character":6},"context":{"includeDeclaration":true}}}
+{"jsonrpc":"2.0","id":5,"method":"textDocument/hover","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/method_type_args.ei"},"position":{"line":20,"character":8}}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

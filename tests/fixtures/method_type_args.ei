@@ -1,0 +1,25 @@
+type Order = { id: i32 }
+type Tag = { n: i32 }
+
+impl Default for Order {
+    fn default() -> Order { Order(1) }
+}
+
+impl Default for Tag {
+    fn default() -> Tag { Tag(2) }
+}
+
+type Holder = { v: i32 }
+
+impl Holder {
+    fn conv[T: Default](self) -> T { T.default() }
+    fn zero[A: Default, B: Default]() -> (A, B) { (A.default(), B.default()) }
+}
+
+fn main() uses io {
+    let h = Holder(3)
+    let o = h.conv[Order]()
+    let (a, b) = Holder.zero[Order, Tag]()
+    let bad = h.conv[Order, Tag]()
+    print(o.id + a.id + b.n)
+}
