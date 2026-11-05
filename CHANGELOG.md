@@ -4,7 +4,7 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
-## Unreleased
+## 0.7.2
 
 No change to the server. The session golden `tests/sessions/dotted.out` (the completion list of `std.`) lost `std.cli` and `std.log`, which left std for the libraries eider-command and eider-logging in Eider 0.7.3 (eider-lang #216, #217). An attribute declared by a package is named after it (`@[command(...)]`, like `@[json(...)]`), which the analyzer already follows.
 
