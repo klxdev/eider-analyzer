@@ -1,6 +1,6 @@
 [package]
 name = "eider_analyzer"
-version = "0.7.0"
+version = "0.7.1"
 eider = "0.7"
 main = "lsp_main.ei"
 description = "eider-analyzer: a language server (LSP 3.17) for Eider, written in Eider"

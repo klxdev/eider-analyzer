@@ -4,7 +4,7 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
-## 0.7.1 (unreleased)
+## 0.7.1
 
 Eider-lang #150 and eider-analyzer #1: the editing features, each as an LSP 3.17 request behind a capability the server
 advertises (`renameProvider` with `prepareProvider`, `workspaceSymbolProvider`, `signatureHelpProvider`,
@@ -14,6 +14,8 @@ advertises (`renameProvider` with `prepareProvider`, `workspaceSymbolProvider`, 
   analysing the edited program again (a rename that would add errors is refused); session `features`, `rename_files`.
 - `textDocument/signatureHelp`, `textDocument/inlayHint` (binding types, parameter names), `workspace/symbol`,
   `textDocument/codeLens` (`eider.runTest`), and the quick fix "Add the missing arm" for E0101.
+- Type arguments on method calls (eider-lang #197, `x.f[T]()`, `Type.f[A, B]()`): the types written are references
+  (definition, references, hover); session `method_type_args`. No code change was needed.
 - Not provided, and why (README, "Not provided"): debug lenses, capability hints, filling all arms at once, a
   workspace-wide symbol index.
 
