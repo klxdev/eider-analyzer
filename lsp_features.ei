@@ -20,7 +20,7 @@ pub fn uri_of(r: Res, file: u32) -> List[u8] {
     r.uri
 }
 
-fn pos_json(inout o: List[u8], p: t.Pos) {
+pub fn pos_json(inout o: List[u8], p: t.Pos) {
     bytes.append(inout o, sys.lit("{{\"line\":"))
     bytes.append(inout o, rpc.num(p.line as u64))
     bytes.append(inout o, sys.lit(",\"character\":"))
@@ -65,9 +65,9 @@ fn inside(s: m.Span, l: u32, c: u32) -> bool {
 }
 
 /// What is at the position: a reference's target or a declaration, with the span there.
-type Hit = { sym: u32, span: m.Span, found: bool }
+pub type Hit = { sym: u32, span: m.Span, found: bool }
 
-fn hit_at(r: Res, p: t.Pos) -> Hit {
+pub fn hit_at(r: Res, p: t.Pos) -> Hit {
     let e = eider_pos(r, p)
     let l = t.pk_line(e)
     let c = t.pk_col(e)
@@ -325,7 +325,7 @@ fn base_name(path: List[u8]) -> List[u8] {
 // ---- document symbols
 
 /// LSP SymbolKind for a symbol (`variants`: a type with variants is an Enum).
-fn symbol_kind(k: u32, variants: bool) -> u64 {
+pub fn symbol_kind(k: u32, variants: bool) -> u64 {
     if k == m.SK_MODULE { return 2 }
     if k == m.SK_TYPE {
         if variants { return 10 }
@@ -347,7 +347,7 @@ fn outline(k: u32) -> bool { k != m.SK_PARAM && k != m.SK_LOCAL }
 
 /// ide.analyze's symbol for a whole module (span 1:1-1:1, full: the file): not an item of
 /// the outline. (The lexical fallback's module symbols are import aliases, with a name span.)
-fn whole_module(s: m.Symbol) -> bool {
+pub fn whole_module(s: m.Symbol) -> bool {
     s.kind == m.SK_MODULE && s.span.line == s.span.end_line && s.span.col == s.span.end_col
 }
 
@@ -1253,7 +1253,7 @@ fn diag_range(inout o: List[u8], r: Res, file: u32, line: u32, col: u32) {
     o.push(125)
 }
 
-fn diag_json(inout o: List[u8], r: Res, d: m.Diag) {
+pub fn diag_json(inout o: List[u8], r: Res, d: m.Diag) {
     o.push(123)
     rpc.key(inout o, "range")
     diag_range(inout o, r, d.file, d.line, d.col)

@@ -1,8 +1,8 @@
 {"jsonrpc":"2.0","id":1,"error":{"code":-32002,"message":"the server is not initialized"}}
-{"jsonrpc":"2.0","id":2,"result":{"capabilities":{"positionEncoding":"utf-16","textDocumentSync":{"openClose":true,"change":1,"save":{"includeText":false}},"hoverProvider":true,"definitionProvider":true,"referencesProvider":true,"documentSymbolProvider":true,"documentFormattingProvider":true,"foldingRangeProvider":true,"codeActionProvider":{"codeActionKinds":["quickfix"]},"completionProvider":{"triggerCharacters":["."]},"semanticTokensProvider":{"legend":{"tokenTypes":["namespace","type","enumMember","property","function","method","parameter","variable","interface","enum"],"tokenModifiers":["declaration","readonly"]},"full":true}},"serverInfo":{"name":"eider-analyzer","version":"0.7.0"}}}
+{"jsonrpc":"2.0","id":2,"result":{"capabilities":{"positionEncoding":"utf-16","textDocumentSync":{"openClose":true,"change":1,"save":{"includeText":false}},"hoverProvider":true,"definitionProvider":true,"referencesProvider":true,"documentSymbolProvider":true,"documentFormattingProvider":true,"foldingRangeProvider":true,"codeActionProvider":{"codeActionKinds":["quickfix"]},"renameProvider":{"prepareProvider":true},"workspaceSymbolProvider":true,"signatureHelpProvider":{"triggerCharacters":["(",","]},"inlayHintProvider":true,"codeLensProvider":{"resolveProvider":false},"completionProvider":{"triggerCharacters":["."]},"semanticTokensProvider":{"legend":{"tokenTypes":["namespace","type","enumMember","property","function","method","parameter","variable","interface","enum"],"tokenModifiers":["declaration","readonly"]},"full":true}},"serverInfo":{"name":"eider-analyzer","version":"0.7.0"}}}
 {"jsonrpc":"2.0","id":"init-again","error":{"code":-32600,"message":"initialize was already called"}}
-{"jsonrpc":"2.0","id":3,"error":{"code":-32601,"message":"unknown method workspace/symbol"}}
-{"jsonrpc":"2.0","id":4,"error":{"code":-32601,"message":"unknown method textDocument/rename"}}
+{"jsonrpc":"2.0","id":3,"result":[]}
+{"jsonrpc":"2.0","id":4,"error":{"code":-32602,"message":"missing params.textDocument.uri"}}
 {"jsonrpc":"2.0","id":5,"result":[]}
 {"jsonrpc":"2.0","id":6,"result":null}
 {"jsonrpc":"2.0","id":7,"result":null}

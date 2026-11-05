@@ -4,6 +4,19 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
+## 0.7.1 (unreleased)
+
+Eider-lang #150 and eider-analyzer #1: the editing features, each as an LSP 3.17 request behind a capability the server
+advertises (`renameProvider` with `prepareProvider`, `workspaceSymbolProvider`, `signatureHelpProvider`,
+`inlayHintProvider`, `codeLensProvider`), computed from the compiler's ide API and the text (`lsp_edit.ei`).
+
+- `textDocument/rename` and `prepareRename`: all declarations and uses the compiler resolved, in every file, checked by
+  analysing the edited program again (a rename that would add errors is refused); session `features`, `rename_files`.
+- `textDocument/signatureHelp`, `textDocument/inlayHint` (binding types, parameter names), `workspace/symbol`,
+  `textDocument/codeLens` (`eider.runTest`), and the quick fix "Add the missing arm" for E0101.
+- Not provided, and why (README, "Not provided"): debug lenses, capability hints, filling all arms at once, a
+  workspace-wide symbol index.
+
 ## 0.7.0
 
 For Eider 0.7 (`eider = "0.7"`). Requires eider-json 0.7.0. The analyzer follows the language changes of 0.7

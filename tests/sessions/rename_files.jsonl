@@ -1,0 +1,16 @@
+# rename across files (main.ei uses geo.ei through an alias) and the workspace symbols of both
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","workspaceFolders":[{"uri":"file://${ROOT}/fixtures","name":"fixtures"}],"capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/main.ei 1
+# a module's function from its use: the declaration in geo.ei and the use here
+{"jsonrpc":"2.0","id":2,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/main.ei"},"position":{"line":23,"character":27},"newName":"surface"}}
+# a variant declared in geo.ei: its pattern there and the construction here
+{"jsonrpc":"2.0","id":3,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/main.ei"},"position":{"line":22,"character":18},"newName":"Disc"}}
+# a field: declaration, `self.left`, `p.left`
+{"jsonrpc":"2.0","id":4,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/main.ei"},"position":{"line":2,"character":15},"newName":"l"}}
+# a module alias is a module: refused
+{"jsonrpc":"2.0","id":5,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/main.ei"},"position":{"line":23,"character":25},"newName":"h"}}
+# workspace symbols reach the modules the open document imports
+{"jsonrpc":"2.0","id":6,"method":"workspace/symbol","params":{"query":"area"}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

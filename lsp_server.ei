@@ -16,6 +16,7 @@ import eider_analyzer.lsp_model as m
 import eider_analyzer.lsp_text as t
 import eider_analyzer.lsp_rpc as rpc
 import eider_analyzer.lsp_features as feat
+import eider_analyzer.lsp_edit as edit
 import eider_analyzer.lsp_analysis as analysis
 import eider_analyzer.lsp_version as ver
 
@@ -462,10 +463,19 @@ fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8])
         s.shutdown = true
         return rpc.result(id, sys.lit("null"))
     }
+    if is(method, "workspace/symbol") {
+        // the analyses of the open documents (analysed first when they are dirty)
+        let mut rs: List[feat.Res] = List.new()
+        for k in 0..s.docs.len() {
+            if s.docs[k].dirty || !s.slots[k].has { analyze_doc(inout s, k as u32) }
+            rs.push(s.slots[k].res)
+        }
+        return rpc.result(id, edit.workspace_symbols(rs, gs(d, params, "query"), s.roots))
+    }
     let uri = uri_param(d, params)
     let is_doc_request = bytes.starts_with(method, sys.lit("textDocument/")) || is(method, "eider/expand")
     if !is_doc_request { return rpc.error(id, rpc.METHOD_NOT_FOUND, unknown(method)) }
-    let known = is(method, "textDocument/hover") || is(method, "textDocument/definition") || is(method, "textDocument/references") || is(method, "textDocument/documentSymbol") || is(method, "textDocument/foldingRange") || is(method, "textDocument/semanticTokens/full") || is(method, "textDocument/completion") || is(method, "textDocument/codeAction") || is(method, "textDocument/formatting") || is(method, "eider/expand")
+    let known = is(method, "textDocument/hover") || is(method, "textDocument/definition") || is(method, "textDocument/references") || is(method, "textDocument/documentSymbol") || is(method, "textDocument/foldingRange") || is(method, "textDocument/semanticTokens/full") || is(method, "textDocument/completion") || is(method, "textDocument/codeAction") || is(method, "textDocument/formatting") || is(method, "textDocument/rename") || is(method, "textDocument/prepareRename") || is(method, "textDocument/signatureHelp") || is(method, "textDocument/inlayHint") || is(method, "textDocument/codeLens") || is(method, "eider/expand")
     if !known { return rpc.error(id, rpc.METHOD_NOT_FOUND, unknown(method)) }
     if uri.len() == 0 { return rpc.error(id, rpc.INVALID_PARAMS, sys.lit("missing params.textDocument.uri")) }
     if is(method, "textDocument/formatting") {
@@ -479,7 +489,8 @@ fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8])
         Some(r) => r
         None => {
             // not open: answer emptily rather than reading the disk behind the client's back
-            let empty = if is(method, "textDocument/hover") || is(method, "textDocument/definition") || is(method, "textDocument/references") { sys.lit("null") } else { sys.lit("[]") }
+            if is(method, "textDocument/rename") || is(method, "textDocument/prepareRename") { return rpc.error(id, rpc.REQUEST_FAILED, sys.lit("the document is not open")) }
+            let empty = if is(method, "textDocument/hover") || is(method, "textDocument/signatureHelp") || is(method, "textDocument/definition") || is(method, "textDocument/references") { sys.lit("null") } else { sys.lit("[]") }
             if is(method, "textDocument/semanticTokens/full") { return rpc.result(id, sys.lit("{{\"data\":[]}}")) }
             if is(method, "textDocument/completion") { return rpc.result(id, sys.lit("{{\"isIncomplete\":false,\"items\":[]}}")) }
             return rpc.result(id, empty)
@@ -500,11 +511,82 @@ fn request(inout s: S, method: List[u8], d: json.Doc, params: u32, id: List[u8])
         let doc = s.docs[i as usize]
         return rpc.result(id, feat.completion(res, doc.path, doc.text, doc.starts, pos_param(d, params)))
     }
-    // textDocument/codeAction
+    if is(method, "textDocument/prepareRename") {
+        let plan = edit.prepare(res, pos_param(d, params), s.roots)
+        if !plan.ok { return rpc.error(id, rpc.REQUEST_FAILED, plan.why) }
+        return rpc.result(id, edit.prepare_json(res, plan))
+    }
+    if is(method, "textDocument/rename") { return rename(inout s, id, res, d, params) }
+    if is(method, "textDocument/signatureHelp") { return rpc.result(id, edit.signature_help(res, pos_param(d, params))) }
+    if is(method, "textDocument/codeLens") { return rpc.result(id, edit.code_lenses(res)) }
     let rg = g(d, params, "range")
     let a = range_pos(d, rg, "start")
     let b = range_pos(d, rg, "end")
-    rpc.result(id, feat.code_actions(res, a.line, b.line))
+    if is(method, "textDocument/inlayHint") { return rpc.result(id, edit.inlay_hints(res, a.line, b.line)) }
+    // textDocument/codeAction
+    rpc.result(id, edit.merge_actions(feat.code_actions(res, a.line, b.line), edit.match_arm_actions(res, a.line, b.line)))
+}
+
+fn count_code(xs: List[m.Diag], code: List[u8]) -> u32 {
+    let mut n: u32 = 0
+    for x in xs {
+        if bytes.eq(x.code, code) { n += 1 }
+    }
+    n
+}
+
+/// `textDocument/rename`: the plan (lsp_edit.rename_plan), checked by analysing the program
+/// again with the edits applied: a rename that makes the compiler report more errors of a
+/// kind than before (a name that is taken, a use the references did not cover) is refused,
+/// and nothing is changed.
+fn rename(inout s: S, id: List[u8], res: feat.Res, d: json.Doc, params: u32) -> List[u8] uses io, fs, net, clock {
+    let new_name = gs(d, params, "newName")
+    let plan = edit.rename_plan(res, pos_param(d, params), new_name, s.roots)
+    if !plan.ok { return rpc.error(id, rpc.REQUEST_FAILED, plan.why) }
+    let i = find_doc(s, res.uri)
+    if i == NONE { return rpc.error(id, rpc.REQUEST_FAILED, sys.lit("the document is not open")) }
+    let entry = s.docs[i as usize].path
+    let mut paths: List[List[u8]] = List.new()
+    let mut texts: List[List[u8]] = List.new()
+    for dd in s.docs {
+        paths.push(dd.path)
+        texts.push(dd.text)
+    }
+    for f in 0..res.an.files.len() {
+        let mut touched = false
+        for e in plan.edits {
+            if e.file == (f as u32) { touched = true }
+        }
+        if !touched { continue }
+        let nt = edit.apply(res, plan, f as u32, new_name)
+        let mut found = false
+        for k in 0..paths.len() {
+            if bytes.eq(analysis.norm(paths[k]), analysis.norm(res.an.files[f])) {
+                texts[k] = nt
+                found = true
+            }
+        }
+        if !found {
+            paths.push(res.an.files[f])
+            texts.push(nt)
+        }
+    }
+    let after = analysis.analyze(entry, paths, texts)
+    s.analyses += 1
+    for x in after.diags {
+        if is(x.code, "E0112") { continue }
+        if count_code(after.diags, x.code) > count_code(res.an.diags, x.code) {
+            let mut w = sys.lit("renaming to `")
+            bytes.append(inout w, new_name)
+            bytes.append(inout w, sys.lit("` would make the program fail to compile ("))
+            bytes.append(inout w, x.code)
+            bytes.append(inout w, sys.lit(": "))
+            bytes.append(inout w, x.msg)
+            bytes.append(inout w, sys.lit("): not renamed"))
+            return rpc.error(id, rpc.REQUEST_FAILED, w)
+        }
+    }
+    rpc.result(id, edit.workspace_edit(res, plan, new_name))
 }
 
 fn unknown(method: List[u8]) -> List[u8] {
@@ -533,6 +615,9 @@ fn capabilities() -> List[u8] {
     bytes.append(inout o, sys.lit("\"hoverProvider\":true,\"definitionProvider\":true,\"referencesProvider\":true,"))
     bytes.append(inout o, sys.lit("\"documentSymbolProvider\":true,\"documentFormattingProvider\":true,\"foldingRangeProvider\":true,"))
     bytes.append(inout o, sys.lit("\"codeActionProvider\":{{\"codeActionKinds\":[\"quickfix\"]}},"))
+    bytes.append(inout o, sys.lit("\"renameProvider\":{{\"prepareProvider\":true}},\"workspaceSymbolProvider\":true,"))
+    bytes.append(inout o, sys.lit("\"signatureHelpProvider\":{{\"triggerCharacters\":[\"(\",\",\"]}},"))
+    bytes.append(inout o, sys.lit("\"inlayHintProvider\":true,\"codeLensProvider\":{{\"resolveProvider\":false}},"))
     bytes.append(inout o, sys.lit("\"completionProvider\":{{\"triggerCharacters\":[\".\"]}},"))
     bytes.append(inout o, sys.lit("\"semanticTokensProvider\":{{\"legend\":"))
     bytes.append(inout o, feat.legend())

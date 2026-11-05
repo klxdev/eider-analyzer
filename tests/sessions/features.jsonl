@@ -1,0 +1,57 @@
+# rename, signature help, inlay hints, workspace symbols, code lenses and the missing-arm quick fix (fixtures/features.ei)
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://${ROOT}/fixtures","capabilities":{}}}
+{"jsonrpc":"2.0","method":"initialized","params":{}}
+!open fixtures/features.ei 1
+# prepareRename on a function: its range and name
+{"jsonrpc":"2.0","id":2,"method":"textDocument/prepareRename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":7,"character":4}}}
+# nothing to rename in a comment
+{"jsonrpc":"2.0","id":3,"method":"textDocument/prepareRename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":0,"character":2}}}
+# rename a function from a call: the declaration and every call, the test's too
+{"jsonrpc":"2.0","id":4,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":26,"character":13},"newName":"grow"}}
+# rename a record field: its uses `p.x`, `.x` on a call result
+{"jsonrpc":"2.0","id":5,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":5,"character":15},"newName":"px"}}
+# rename a method from its declaration
+{"jsonrpc":"2.0","id":6,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":12,"character":8},"newName":"moved"}}
+# rename a pattern binding: its uses in the arm
+{"jsonrpc":"2.0","id":7,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":19,"character":15},"newName":"radius"}}
+# rename a variant: the pattern and the construction
+{"jsonrpc":"2.0","id":8,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":3,"character":20},"newName":"Disc"}}
+# a name that is taken is refused: the program would not compile
+{"jsonrpc":"2.0","id":9,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":7,"character":19},"newName":"p"}}
+# a keyword is not a name
+{"jsonrpc":"2.0","id":10,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":7,"character":4},"newName":"fn"}}
+# nor is a number
+{"jsonrpc":"2.0","id":11,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":7,"character":4},"newName":"1x"}}
+# a toolchain symbol is refused
+{"jsonrpc":"2.0","id":12,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":37,"character":13},"newName":"Maybe"}}
+# the same name
+{"jsonrpc":"2.0","id":13,"method":"textDocument/rename","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":7,"character":4},"newName":"scale"}}
+# signature help: the second parameter of a function with defaults
+{"jsonrpc":"2.0","id":14,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":26,"character":22}}}
+# a method: self is not a parameter
+{"jsonrpc":"2.0","id":15,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":27,"character":29}}}
+# a named argument selects its parameter
+{"jsonrpc":"2.0","id":16,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":40,"character":31}}}
+# a record constructor
+{"jsonrpc":"2.0","id":17,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":40,"character":19}}}
+# a variant inside a call
+{"jsonrpc":"2.0","id":18,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":27,"character":48}}}
+# outside a call: null
+{"jsonrpc":"2.0","id":19,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"position":{"line":28,"character":6}}}
+# inlay hints: the types of `let` bindings, the names of positional arguments
+{"jsonrpc":"2.0","id":20,"method":"textDocument/inlayHint","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"range":{"start":{"line":0,"character":0},"end":{"line":43,"character":0}}}}
+# only the requested lines
+{"jsonrpc":"2.0","id":21,"method":"textDocument/inlayHint","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"range":{"start":{"line":25,"character":0},"end":{"line":27,"character":0}}}}
+# a lens on each test
+{"jsonrpc":"2.0","id":22,"method":"textDocument/codeLens","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"}}}
+# the missing arm of `area`
+{"jsonrpc":"2.0","id":23,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"range":{"start":{"line":18,"character":4},"end":{"line":18,"character":4}},"context":{"diagnostics":[]}}}
+# no fix on a line without a diagnostic
+{"jsonrpc":"2.0","id":24,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"file://${ROOT}/fixtures/features.ei"},"range":{"start":{"line":26,"character":0},"end":{"line":26,"character":0}},"context":{"diagnostics":[]}}}
+# workspace symbols: a prefix, then a subsequence, then everything (the toolchain's are not listed)
+{"jsonrpc":"2.0","id":25,"method":"workspace/symbol","params":{"query":"sc"}}
+{"jsonrpc":"2.0","id":26,"method":"workspace/symbol","params":{"query":"shd"}}
+{"jsonrpc":"2.0","id":27,"method":"workspace/symbol","params":{"query":""}}
+{"jsonrpc":"2.0","id":28,"method":"workspace/symbol","params":{"query":"zzz"}}
+{"jsonrpc":"2.0","id":99,"method":"shutdown"}
+{"jsonrpc":"2.0","method":"exit"}

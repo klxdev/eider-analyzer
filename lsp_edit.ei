@@ -1,0 +1,782 @@
+// lsp_edit: the editing features (eider-lang #150, eider-analyzer #1): rename, signature help,
+// inlay hints, workspace symbols, code lenses on tests and the quick fix that adds a missing
+// match arm. Like lsp_features, every function takes one analysis (lsp_features.Res) and
+// returns the JSON text of a `result`; they never fail: what cannot be answered is `null` or
+// an empty list (rename: a Plan that says why not).
+//
+// All of it is computed from what the compiler's ide API gives (symbols with their children,
+// references, the type of a binding, diagnostics) and the text; nothing here needs the
+// compiler to know more than it does. What it would need and does not have is listed in the
+// README ("Not provided").
+
+import core.sys
+import std.bytes
+import json
+import eider_analyzer.lsp_model as m
+import eider_analyzer.lsp_text as t
+import eider_analyzer.lsp_rpc as rpc
+import eider_analyzer.lsp_features as feat
+
+fn lit(s: str) -> List[u8] { sys.lit(s) }
+
+fn is(a: List[u8], s: str) -> bool { bytes.eq(a, sys.lit(s)) }
+
+// ---- names
+
+fn is_keyword(name: List[u8]) -> bool {
+    for w in ["fn", "type", "let", "var", "if", "else", "while", "for", "in", "return", "match", "true", "false", "uses", "test",
+        "assert", "inout", "as", "const", "module", "break", "continue", "null", "import", "trait", "impl", "pub", "comptime",
+        "extern", "export", "unsafe", "_"] {
+        if is(name, w) { return true }
+    }
+    false
+}
+
+/// An identifier the lexer reads as one name and that is not a keyword.
+pub fn valid_name(name: List[u8]) -> bool {
+    if name.len() == 0 { return false }
+    let c0 = name[0]
+    if !(bytes.is_alpha(c0) || c0 == 95) { return false }
+    for b in name {
+        if !bytes.is_ident(b) { return false }
+    }
+    !is_keyword(name)
+}
+
+fn lower(b: u8) -> u8 { if b >= 65 && b <= 90 { b + 32 } else { b } }
+
+fn same_icase(a: u8, b: u8) -> bool { lower(a) == lower(b) }
+
+// ---- where the editor may write
+
+/// The toolchain's directory (with a trailing `/`), from the prelude among the analysed files.
+fn tool_root(r: feat.Res) -> List[u8] {
+    for p in r.an.files {
+        if bytes.ends_with(p, lit("/core/prelude.ei")) {
+            let mut d = t.dir_of(t.dir_of(p))
+            d.push(47)
+            return d
+        }
+    }
+    List.new()
+}
+
+/// Whether file `file` of the analysis may be edited: file 0 always; a file under a workspace
+/// root; not one of the toolchain's (core, std, the prelude) otherwise.
+pub fn editable(r: feat.Res, roots: List[List[u8]], file: u32) -> bool {
+    if file == 0 { return true }
+    let f = file as usize
+    if f >= r.an.files.len() { return false }
+    let path = r.an.files[f]
+    for root in roots {
+        if root.len() > 0 && bytes.starts_with(path, root) { return true }
+    }
+    let tool = tool_root(r)
+    if tool.len() > 0 && bytes.starts_with(path, tool) { return false }
+    true
+}
+
+// ---- rename
+
+/// A byte range of file `file` of the analysis.
+pub type Edit = { file: u32, a: usize, b: usize }
+
+/// What a rename at a position is: `ok` and the symbol, its name, the span under the cursor
+/// and every edit (each replaces the old name), or `why` it cannot.
+pub type Plan = { ok: bool, why: List[u8], sym: u32, old: List[u8], range: m.Span, edits: List[Edit] }
+
+fn no(why: List[u8]) -> Plan { Plan(false, why, 0, List.new(), m.span(0, 0, 0, 0, 0), List.new()) }
+
+/// `prepareRename`: the symbol at the position, or why it cannot be renamed.
+pub fn prepare(r: feat.Res, p: t.Pos, roots: List[List[u8]]) -> Plan {
+    let h = feat.hit_at(r, p)
+    if !h.found { return no(lit("there is nothing to rename at this position")) }
+    let s = r.an.symbols[h.sym as usize]
+    if s.kind == m.SK_MODULE { return no(lit("a module cannot be renamed here: rename its file and fix the imports")) }
+    if s.kind == m.SK_TEST { return no(lit("a test is named by its string; edit the string")) }
+    if is(s.name, "self") || is(s.name, "Self") || is(s.name, "_") { return no(lit("`self`, `Self` and `_` cannot be renamed")) }
+    if !editable(r, roots, s.span.file) {
+        let mut w = lit("`")
+        bytes.append(inout w, s.name)
+        bytes.append(inout w, lit("` is declared in "))
+        bytes.append(inout w, r.an.files[s.span.file as usize])
+        bytes.append(inout w, lit(", which is not part of the workspace"))
+        return no(w)
+    }
+    Plan(true, List.new(), h.sym, s.name.copy(), h.span, List.new())
+}
+
+/// The plan to rename the symbol at the position to `new_name`: the declaration and every
+/// reference the compiler resolved to it, in all files; refused when the new name is not an
+/// identifier, is the old one, or any of the places is outside the workspace or does not read
+/// as the old name.
+pub fn rename_plan(r: feat.Res, p: t.Pos, new_name: List[u8], roots: List[List[u8]]) -> Plan {
+    let base = prepare(r, p, roots)
+    if !base.ok { return base }
+    if !valid_name(new_name) {
+        let mut w = lit("`")
+        bytes.append(inout w, new_name)
+        bytes.append(inout w, lit("` is not a name: it must be an identifier that is not a keyword"))
+        return no(w)
+    }
+    if bytes.eq(new_name, base.old) { return no(lit("the new name is the old one")) }
+    let s = r.an.symbols[base.sym as usize]
+    let mut cands: List[m.Span] = List.new()
+    cands.push(s.span)
+    for x in r.an.refs {
+        if x.target == base.sym { cands.push(x.span) }
+    }
+    let mut edits: List[Edit] = List.new()
+    for sp in cands {
+        let f = sp.file as usize
+        if f >= r.texts.len() || r.texts[f].len() == 0 { return no(lit("a file that uses the name could not be read")) }
+        if !editable(r, roots, sp.file) {
+            let mut w = lit("`")
+            bytes.append(inout w, base.old)
+            bytes.append(inout w, lit("` is used in "))
+            bytes.append(inout w, r.an.files[f])
+            bytes.append(inout w, lit(", which is not part of the workspace"))
+            return no(w)
+        }
+        let a = t.offset_of(r.texts[f], r.starts[f], sp.line, sp.col)
+        let b = t.offset_of(r.texts[f], r.starts[f], sp.end_line, sp.end_col)
+        if b <= a || !bytes.eq(bytes.slice(r.texts[f], a, b), base.old) {
+            let mut w = lit("a use of `")
+            bytes.append(inout w, base.old)
+            bytes.append(inout w, lit("` in "))
+            bytes.append(inout w, r.an.files[f])
+            bytes.append(inout w, lit(" is not spelled with the name (generated code?): not renamed"))
+            return no(w)
+        }
+        let mut dup = false
+        for e in edits {
+            if e.file == sp.file && e.a == a { dup = true }
+        }
+        if !dup { edits.push(Edit(sp.file, a, b)) }
+    }
+    Plan(true, List.new(), base.sym, base.old, base.range, edits)
+}
+
+/// The text of file `file` with the plan's edits applied.
+pub fn apply(r: feat.Res, plan: Plan, file: u32, new_name: List[u8]) -> List[u8] {
+    let text = r.texts[file as usize]
+    let mut offs: List[u64] = List.new()
+    for e in plan.edits {
+        if e.file == file { offs.push(e.a as u64) }
+    }
+    let sorted = feat.sort_u64(offs)
+    let mut out: List[u8] = List.new()
+    let mut at: usize = 0
+    for o in sorted {
+        let a = o as usize
+        bytes.append(inout out, bytes.slice(text, at, a))
+        bytes.append(inout out, new_name)
+        at = a + plan.old.len()
+    }
+    bytes.append(inout out, bytes.slice(text, at, text.len()))
+    out
+}
+
+/// The WorkspaceEdit of a plan: `changes` per file.
+pub fn workspace_edit(r: feat.Res, plan: Plan, new_name: List[u8]) -> List[u8] {
+    let mut o = lit("{{\"changes\":{{")
+    let mut first = true
+    for f in 0..r.an.files.len() {
+        let mut offs: List[u64] = List.new()
+        for e in plan.edits {
+            if e.file == (f as u32) { offs.push(e.a as u64) }
+        }
+        if offs.len() == 0 { continue }
+        if !first { o.push(44) }
+        first = false
+        json.quote_into(inout o, feat.uri_of(r, f as u32))
+        bytes.append(inout o, lit(":["))
+        let sorted = feat.sort_u64(offs)
+        let mut k: usize = 0
+        for a in sorted {
+            if k > 0 { o.push(44) }
+            k += 1
+            let ao = a as usize
+            bytes.append(inout o, lit("{{\"range\":{{\"start\":"))
+            feat.pos_json(inout o, t.pos_of_offset(r.texts[f], r.starts[f], ao))
+            bytes.append(inout o, lit(",\"end\":"))
+            feat.pos_json(inout o, t.pos_of_offset(r.texts[f], r.starts[f], ao + plan.old.len()))
+            bytes.append(inout o, lit("}},\"newText\":"))
+            json.quote_into(inout o, new_name)
+            o.push(125)
+        }
+        o.push(93)
+    }
+    bytes.append(inout o, lit("}}}}"))
+    o
+}
+
+/// The `prepareRename` result: the range and the placeholder.
+pub fn prepare_json(r: feat.Res, plan: Plan) -> List[u8] {
+    let mut o: List[u8] = List.new()
+    o.push(123)
+    rpc.key(inout o, "range")
+    feat.range_json(inout o, r, plan.range)
+    rpc.kv_str(inout o, "placeholder", plan.old)
+    o.push(125)
+    o
+}
+
+// ---- calls in the text
+
+fn skip_ws(text: List[u8], i: usize) -> usize {
+    let mut k: usize = i.copy()
+    while k < text.len() && bytes.is_space(text[k]) { k += 1 }
+    k
+}
+
+/// A call's argument: the byte range [a, b) of its text without the blanks around it.
+type Arg = { a: usize, b: usize }
+
+/// The arguments of the call whose `(` is at `open`, split at the commas of its own level
+/// (brackets, braces and string literals are skipped, and `//` comments).
+fn call_args(text: List[u8], open: usize) -> List[Arg] {
+    let mut args: List[Arg] = List.new()
+    let mut depth: u32 = 0
+    let mut i: usize = open + 1
+    let mut start: usize = open + 1
+    while i < text.len() {
+        let c = text[i]
+        if c == 34 {
+            i += 1
+            while i < text.len() && text[i] != 34 {
+                if text[i] == 92 { i += 1 }
+                i += 1
+            }
+            i += 1
+            continue
+        }
+        if c == 47 && i + 1 < text.len() && text[i + 1] == 47 {
+            while i < text.len() && text[i] != 10 { i += 1 }
+            continue
+        }
+        if c == 40 || c == 91 || c == 123 {
+            depth += 1
+        } else if c == 41 || c == 93 || c == 125 {
+            if depth == 0 {
+                if c == 41 { push_arg(inout args, text, start, i) }
+                return args
+            }
+            depth -= 1
+        } else if c == 44 && depth == 0 {
+            push_arg(inout args, text, start, i)
+            start = i + 1
+        }
+        i += 1
+    }
+    List.new()
+}
+
+fn push_arg(inout args: List[Arg], text: List[u8], from: usize, to: usize) {
+    let mut a: usize = from.copy()
+    let mut b: usize = to.copy()
+    while a < b && bytes.is_space(text[a]) { a += 1 }
+    while b > a && bytes.is_space(text[b - 1]) { b -= 1 }
+    if b > a { args.push(Arg(a, b)) }
+}
+
+/// `name = value` at the start of an argument: the name's length, else 0.
+fn named_len(text: List[u8], a: usize, b: usize) -> usize {
+    let mut i: usize = a.copy()
+    while i < b && bytes.is_ident(text[i]) { i += 1 }
+    if i == a { return 0 }
+    let n = i - a
+    let k = skip_ws(text, i)
+    if k < b && text[k] == 61 && !(k + 1 < b && text[k + 1] == 61) { return n }
+    0
+}
+
+/// The parameters (kind SK_PARAM; for a variant or a record type its fields) of symbol `idx`,
+/// without `self` when `skip_self`.
+fn params_of(r: feat.Res, idx: u32, skip_self: bool) -> List[u32] {
+    let k = r.an.symbols[idx as usize].kind
+    let want = if k == m.SK_VARIANT || k == m.SK_TYPE { m.SK_FIELD } else { m.SK_PARAM }
+    let mut out: List[u32] = List.new()
+    if !(k == m.SK_FN || k == m.SK_METHOD || k == m.SK_VARIANT || k == m.SK_TYPE) { return out }
+    for i in 0..r.an.symbols.len() {
+        let s = r.an.symbols[i]
+        if s.container == idx && s.kind == want {
+            if skip_self && is(s.name, "self") { continue }
+            out.push(i as u32)
+        }
+    }
+    out
+}
+
+// ---- signature help
+
+/// The call around the cursor: its `(`, the number of commas of its own level before the
+/// cursor and where the current argument starts.
+type Open = { found: bool, open: usize, commas: u32, arg: usize }
+
+fn open_call(text: List[u8], off: usize) -> Open {
+    let mut i: usize = off.copy()
+    let mut depth: u32 = 0
+    let mut commas: u32 = 0
+    let mut arg: usize = 0
+    let mut have_arg = false
+    let mut budget: usize = 20000
+    while i > 0 && budget > 0 {
+        i -= 1
+        budget -= 1
+        let c = text[i]
+        if c == 34 {
+            // the end of a string literal: back to its opening quote
+            while i > 0 {
+                i -= 1
+                if text[i] == 34 && (i == 0 || text[i - 1] != 92) { break }
+            }
+            continue
+        }
+        if c == 41 || c == 93 || c == 125 {
+            depth += 1
+        } else if c == 40 {
+            if depth == 0 {
+                if !have_arg { arg = i + 1 }
+                return Open(true, i, commas, arg)
+            }
+            depth -= 1
+        } else if c == 91 || c == 123 {
+            if depth == 0 { return Open(false, 0, 0, 0) }
+            depth -= 1
+        } else if c == 44 && depth == 0 {
+            commas += 1
+            if !have_arg {
+                arg = i + 1
+                have_arg = true
+            }
+        }
+    }
+    Open(false, 0, 0, 0)
+}
+
+/// The label of a callee's signature: its detail for a function, method or variant, the
+/// constructor `Name(field: T, ...)` for a record type.
+fn signature_label(r: feat.Res, idx: u32, params: List[u32]) -> List[u8] {
+    let s = r.an.symbols[idx as usize]
+    if s.kind != m.SK_TYPE { return s.detail.copy() }
+    let mut l = s.name.copy()
+    l.push(40)
+    let mut k: usize = 0
+    for pi in params {
+        if k > 0 { bytes.append(inout l, lit(", ")) }
+        k += 1
+        bytes.append(inout l, r.an.symbols[pi as usize].detail)
+    }
+    l.push(41)
+    l
+}
+
+/// `textDocument/signatureHelp`: the signature of the function, method, variant or record
+/// constructor being called at the position, and the parameter the cursor is in (the one a
+/// named argument names, else by position).
+pub fn signature_help(r: feat.Res, p: t.Pos) -> List[u8] {
+    if r.texts.len() == 0 { return lit("null") }
+    let text = r.texts[0]
+    let starts = r.starts[0]
+    let off = t.offset_of_pos(text, starts, p)
+    let oc = open_call(text, off)
+    if !oc.found || oc.open == 0 { return lit("null") }
+    // the callee's name ends at the `(`, or at the `[` of its type arguments
+    let mut name_end: usize = oc.open.copy()
+    if text[name_end - 1] == 93 {
+        let mut j = name_end - 1
+        let mut depth: u32 = 0
+        while true {
+            if text[j] == 93 { depth += 1 }
+            if text[j] == 91 {
+                depth -= 1
+                if depth == 0 { break }
+            }
+            if j == 0 { return lit("null") }
+            j -= 1
+        }
+        name_end = j
+    }
+    if name_end == 0 || !t.ident_byte(text[name_end - 1]) { return lit("null") }
+    let e = feat.eider_pos(r, t.pos_of_offset(text, starts, name_end))
+    let l = t.pk_line(e)
+    let c = t.pk_col(e)
+    let mut target: u32 = 4294967295
+    for x in r.an.refs {
+        if x.span.file == 0 && x.span.end_line == l && x.span.end_col == c && (x.target as usize) < r.an.symbols.len() { target = x.target }
+    }
+    if target == 4294967295 { return lit("null") }
+    let mut ns = name_end
+    while ns > 0 && t.ident_byte(text[ns - 1]) { ns -= 1 }
+    let dotted = ns > 0 && text[ns - 1] == 46
+    let params = params_of(r, target, dotted)
+    if params.len() == 0 && r.an.symbols[target as usize].kind != m.SK_FN && r.an.symbols[target as usize].kind != m.SK_METHOD { return lit("null") }
+    let mut active: u32 = oc.commas.copy()
+    let nl = named_len(text, skip_ws(text, oc.arg), off)
+    if nl > 0 {
+        let an = bytes.slice(text, skip_ws(text, oc.arg), skip_ws(text, oc.arg) + nl)
+        for k in 0..params.len() {
+            if bytes.eq(r.an.symbols[params[k] as usize].name, an) { active = k as u32 }
+        }
+    }
+    if params.len() > 0 && (active as usize) >= params.len() { active = (params.len() - 1) as u32 }
+    let mut o: List[u8] = List.new()
+    o.push(123)
+    rpc.key(inout o, "signatures")
+    o.push(91)
+    o.push(123)
+    rpc.kv_str(inout o, "label", signature_label(r, target, params))
+    rpc.key(inout o, "parameters")
+    o.push(91)
+    for pi in params {
+        rpc.sep(inout o)
+        o.push(123)
+        rpc.kv_str(inout o, "label", r.an.symbols[pi as usize].detail)
+        o.push(125)
+    }
+    o.push(93)
+    o.push(125)
+    o.push(93)
+    rpc.kv_num(inout o, "activeSignature", 0)
+    rpc.kv_num(inout o, "activeParameter", active as u64)
+    o.push(125)
+    o
+}
+
+// ---- inlay hints
+
+fn hint(inout o: List[u8], pos: t.Pos, label: List[u8], kind: u64, left: bool) {
+    rpc.sep(inout o)
+    o.push(123)
+    rpc.key(inout o, "position")
+    feat.pos_json(inout o, pos)
+    rpc.kv_str(inout o, "label", label)
+    rpc.kv_num(inout o, "kind", kind)
+    rpc.kv_raw(inout o, "paddingLeft", if left { lit("true") } else { lit("false") })
+    rpc.kv_raw(inout o, "paddingRight", if left { lit("false") } else { lit("true") })
+    o.push(125)
+}
+
+/// `textDocument/inlayHint` for the lines first..last (LSP, inclusive): the type of a
+/// `let`/`var` binding that has no annotation (`: Point`, from the checker's type of the
+/// binding) and the name of the parameter in front of each positional argument of a call to
+/// a function, method, variant or record constructor (`by:`), not where the argument is
+/// the parameter's own name or a named argument.
+pub fn inlay_hints(r: feat.Res, first: u32, last: u32) -> List[u8] {
+    let mut o = lit("[")
+    if r.texts.len() == 0 { return lit("[]") }
+    let text = r.texts[0]
+    let starts = r.starts[0]
+    let mut count: u32 = 0
+    for s in r.an.symbols {
+        if s.kind != m.SK_LOCAL || s.span.file != 0 || s.detail.len() == 0 || is(s.detail, "()") { continue }
+        if s.span.line == 0 || s.span.line - 1 < first || s.span.line - 1 > last { continue }
+        let fo = t.offset_of(text, starts, s.full.line, s.full.col)
+        let kw = bytes.slice(text, fo, fo + 4)
+        if !(is(kw, "let ") || is(kw, "var ")) { continue }
+        let ne = t.offset_of(text, starts, s.span.end_line, s.span.end_col)
+        let k = skip_ws(text, ne)
+        if k >= text.len() || text[k] != 61 { continue }
+        let mut label = lit(": ")
+        bytes.append(inout label, s.detail)
+        hint(inout o, t.pos_of_offset(text, starts, ne), label, 1, false)
+        count += 1
+    }
+    for x in r.an.refs {
+        if count >= 1000 { break }
+        if x.span.file != 0 || (x.target as usize) >= r.an.symbols.len() { continue }
+        if x.span.line == 0 || x.span.line - 1 < first || x.span.line - 1 > last { continue }
+        let ty = r.an.symbols[x.target as usize]
+        if !(ty.kind == m.SK_FN || ty.kind == m.SK_METHOD || ty.kind == m.SK_VARIANT || ty.kind == m.SK_TYPE) { continue }
+        let a = t.offset_of(text, starts, x.span.line, x.span.col)
+        let e = t.offset_of(text, starts, x.span.end_line, x.span.end_col)
+        if e >= text.len() || text[e] != 40 { continue }
+        let dotted = a > 0 && text[a - 1] == 46
+        let params = params_of(r, x.target, dotted)
+        if params.len() == 0 { continue }
+        let args = call_args(text, e)
+        for k in 0..args.len() {
+            if k >= params.len() { break }
+            let arg = args[k]
+            if named_len(text, arg.a, arg.b) > 0 { continue }
+            let pname = r.an.symbols[params[k] as usize].name
+            if pname.len() == 0 || pname[0] == 95 { continue }
+            let mut atext = bytes.slice(text, arg.a, arg.b)
+            if bytes.starts_with(atext, lit("inout ")) { atext = bytes.trim(bytes.slice(atext, 6, atext.len())) }
+            if bytes.eq(atext, pname) { continue }
+            let mut label = pname.copy()
+            label.push(58)
+            hint(inout o, t.pos_of_offset(text, starts, arg.a), label, 2, false)
+            count += 1
+        }
+    }
+    o.push(93)
+    o
+}
+
+// ---- workspace symbols
+
+fn subsequence(name: List[u8], q: List[u8]) -> bool {
+    let mut k: usize = 0
+    for b in name {
+        if k < q.len() && same_icase(b, q[k]) { k += 1 }
+    }
+    k == q.len()
+}
+
+fn contains_icase(name: List[u8], q: List[u8]) -> bool {
+    if q.len() > name.len() { return false }
+    let mut i: usize = 0
+    while i + q.len() <= name.len() {
+        let mut ok = true
+        for j in 0..q.len() {
+            if !same_icase(name[i + j], q[j]) { ok = false }
+        }
+        if ok { return true }
+        i += 1
+    }
+    false
+}
+
+/// 0: the whole name, 1: a prefix, 2: a substring, 3: a subsequence (all ignoring case), 4: none.
+fn rank(name: List[u8], q: List[u8]) -> u32 {
+    if q.len() == 0 { return 2 }
+    if name.len() == q.len() && contains_icase(name, q) { return 0 }
+    if name.len() >= q.len() {
+        let mut pre = true
+        for j in 0..q.len() {
+            if !same_icase(name[j], q[j]) { pre = false }
+        }
+        if pre { return 1 }
+    }
+    if contains_icase(name, q) { return 2 }
+    if subsequence(name, q) { return 3 }
+    4
+}
+
+fn indexed(kind: u32) -> bool {
+    kind == m.SK_TYPE || kind == m.SK_VARIANT || kind == m.SK_FN || kind == m.SK_METHOD || kind == m.SK_CONST || kind == m.SK_TRAIT
+}
+
+/// `workspace/symbol`: the types, variants, functions, methods, constants and traits of the
+/// open documents' analyses (the modules they import included, the toolchain's not) whose name
+/// matches `query` (a case-insensitive subsequence; whole name, prefix, substring first), at
+/// most 200, each once. Only what has been analysed is searched: a file nobody has open or
+/// imports is not indexed.
+pub fn workspace_symbols(rs: List[feat.Res], query: List[u8], roots: List[List[u8]]) -> List[u8] {
+    let mut buckets: List[List[u64]] = List.new()
+    for _bi in 0..4 { buckets.push(List.new()) }
+    for ri in 0..rs.len() {
+        let r = rs[ri]
+        for si in 0..r.an.symbols.len() {
+            let s = r.an.symbols[si]
+            if !indexed(s.kind) || feat.whole_module(s) { continue }
+            if !editable(r, roots, s.span.file) { continue }
+            let k = rank(s.name, query)
+            if k >= 4 { continue }
+            buckets[k as usize].push((ri as u64) * 4294967296 + (si as u64))
+        }
+    }
+    let mut o = lit("[")
+    let mut seen: List[List[u8]] = List.new()
+    for b in buckets {
+        for packed in b {
+            if seen.len() >= 200 { break }
+            let ri = (packed / 4294967296) as usize
+            let si = (packed % 4294967296) as usize
+            let r = rs[ri]
+            let s = r.an.symbols[si]
+            let mut key = r.an.files[s.span.file as usize].copy()
+            key.push(58)
+            bytes.append(inout key, bytes.from_u64(s.span.line as u64))
+            key.push(58)
+            bytes.append(inout key, bytes.from_u64(s.span.col as u64))
+            let mut dup = false
+            for q in seen {
+                if bytes.eq(q, key) { dup = true }
+            }
+            if dup { continue }
+            seen.push(key)
+            let mut variants = false
+            if s.kind == m.SK_TYPE {
+                for x in r.an.symbols {
+                    if x.kind == m.SK_VARIANT && x.container == (si as u32) { variants = true }
+                }
+            }
+            rpc.sep(inout o)
+            o.push(123)
+            rpc.kv_str(inout o, "name", s.name)
+            rpc.kv_num(inout o, "kind", feat.symbol_kind(s.kind, variants))
+            rpc.key(inout o, "location")
+            bytes.append(inout o, lit("{{\"uri\":"))
+            json.quote_into(inout o, feat.uri_of(r, s.span.file))
+            bytes.append(inout o, lit(",\"range\":"))
+            feat.range_json(inout o, r, s.span)
+            o.push(125)
+            if s.container != m.NONE && (s.container as usize) < r.an.symbols.len() {
+                let cs = r.an.symbols[s.container as usize]
+                if cs.kind != m.SK_MODULE { rpc.kv_str(inout o, "containerName", cs.name) }
+            }
+            o.push(125)
+        }
+    }
+    o.push(93)
+    o
+}
+
+// ---- code lenses
+
+/// `textDocument/codeLens`: one lens on each `test` of the document, the command
+/// `eider.runTest` with the document's URI and the test's name as arguments. The client runs
+/// it (`eiderc test <file>` runs the file's tests; eiderc has no filter by name yet). There is
+/// no "debug" lens: that needs a debug adapter, which Eider does not have.
+pub fn code_lenses(r: feat.Res) -> List[u8] {
+    let mut o = lit("[")
+    for s in r.an.symbols {
+        if s.kind != m.SK_TEST || s.span.file != 0 { continue }
+        rpc.sep(inout o)
+        o.push(123)
+        rpc.key(inout o, "range")
+        feat.range_json(inout o, r, s.span)
+        rpc.key(inout o, "command")
+        o.push(123)
+        rpc.kv_str(inout o, "title", lit("Run test"))
+        rpc.kv_str(inout o, "command", lit("eider.runTest"))
+        rpc.key(inout o, "arguments")
+        o.push(91)
+        json.quote_into(inout o, r.uri)
+        o.push(44)
+        json.quote_into(inout o, s.name)
+        o.push(93)
+        o.push(125)
+        o.push(125)
+    }
+    o.push(93)
+    o
+}
+
+// ---- the missing match arm
+
+/// The byte offset of the `}` that closes the match whose `match` keyword starts at `from`,
+/// or None.
+fn match_close(text: List[u8], from: usize) -> Option[usize] {
+    let mut i: usize = from.copy()
+    let mut depth: u32 = 0
+    let mut opened = false
+    let mut parens: u32 = 0
+    while i < text.len() {
+        let c = text[i]
+        if c == 34 {
+            i += 1
+            while i < text.len() && text[i] != 34 {
+                if text[i] == 92 { i += 1 }
+                i += 1
+            }
+            i += 1
+            continue
+        }
+        if c == 47 && i + 1 < text.len() && text[i + 1] == 47 {
+            while i < text.len() && text[i] != 10 { i += 1 }
+            continue
+        }
+        if c == 40 || c == 91 { parens += 1 }
+        if (c == 41 || c == 93) && parens > 0 { parens -= 1 }
+        if c == 123 && (opened || parens == 0) {
+            depth += 1
+            opened = true
+        } else if c == 125 && opened {
+            depth -= 1
+            if depth == 0 { return Some(i) }
+        }
+        i += 1
+    }
+    None
+}
+
+fn line_start(text: List[u8], off: usize) -> usize {
+    let mut i: usize = off.copy()
+    while i > 0 && text[i - 1] != 10 { i -= 1 }
+    i
+}
+
+/// The indentation of the line starting at `ls`.
+fn indent_at(text: List[u8], ls: usize) -> List[u8] {
+    let mut e: usize = ls.copy()
+    while e < text.len() && (text[e] == 32 || text[e] == 9) { e += 1 }
+    bytes.slice(text, ls, e)
+}
+
+/// For each E0101 (non-exhaustive match) in the lines first..last: the quick fix that adds
+/// the arm for the value the checker found unhandled (`Tri(_, _) => panic(...)`) before the
+/// match's closing brace, as the inner text of a JSON array (empty when there is none).
+/// Applying it again adds the next unhandled value: the checker reports one at a time.
+pub fn match_arm_actions(r: feat.Res, first: u32, last: u32) -> List[u8] {
+    let mut o: List[u8] = List.new()
+    if r.texts.len() == 0 { return o }
+    let text = r.texts[0]
+    let starts = r.starts[0]
+    for d in r.an.diags {
+        if d.file != 0 || !is(d.code, "E0101") { continue }
+        if d.line == 0 || d.line - 1 < first || d.line - 1 > last { continue }
+        let pre = lit("non-exhaustive match: `")
+        let post = lit("` is not handled")
+        if !bytes.starts_with(d.msg, pre) || !bytes.ends_with(d.msg, post) { continue }
+        let w = bytes.slice(d.msg, pre.len(), d.msg.len() - post.len())
+        let from = t.offset_of(text, starts, d.line, d.col)
+        let cb = match match_close(text, from) {
+            Some(x) => x
+            None => { continue }
+        }
+        let ls = line_start(text, cb)
+        // the arms go on their own lines: the closing brace must start its line
+        if bytes.trim(bytes.slice(text, ls, cb)).len() != 0 { continue }
+        let close_indent = indent_at(text, ls)
+        let mut arm_indent = close_indent.copy()
+        bytes.append(inout arm_indent, lit("    "))
+        // follow the arms above when there are some
+        if ls >= 2 {
+            let pl = line_start(text, ls - 1)
+            let prev = bytes.slice(text, pl, ls - 1)
+            let tp = bytes.trim(prev)
+            if tp.len() > 0 && tp[tp.len() - 1] != 123 { arm_indent = indent_at(text, pl) }
+        }
+        let mut arm = arm_indent.copy()
+        bytes.append(inout arm, w)
+        bytes.append(inout arm, lit(" => panic(\"not handled\".to_string())\n"))
+        let mut title = lit("Add the missing arm `")
+        bytes.append(inout title, w)
+        title.push(96)
+        if o.len() > 0 { o.push(44) }
+        o.push(123)
+        rpc.kv_str(inout o, "title", title)
+        rpc.kv_str(inout o, "kind", lit("quickfix"))
+        rpc.key(inout o, "diagnostics")
+        o.push(91)
+        feat.diag_json(inout o, r, d)
+        o.push(93)
+        rpc.key(inout o, "edit")
+        bytes.append(inout o, lit("{{\"changes\":{{"))
+        json.quote_into(inout o, r.uri)
+        bytes.append(inout o, lit(":[{{\"range\":{{\"start\":"))
+        let p0 = t.pos_of_offset(text, starts, ls)
+        feat.pos_json(inout o, p0)
+        bytes.append(inout o, lit(",\"end\":"))
+        feat.pos_json(inout o, p0)
+        bytes.append(inout o, lit("}},\"newText\":"))
+        json.quote_into(inout o, arm)
+        bytes.append(inout o, lit(r"}]}}"))
+        o.push(125)
+    }
+    o
+}
+
+/// The code actions `base` (a JSON array) and `extra` (the inner text of one) together.
+pub fn merge_actions(base: List[u8], extra: List[u8]) -> List[u8] {
+    if extra.len() == 0 { return base }
+    let mut o = bytes.slice(base, 0, base.len() - 1)
+    if o.len() > 1 { o.push(44) }
+    bytes.append(inout o, extra)
+    o.push(93)
+    o
+}
