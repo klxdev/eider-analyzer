@@ -4,6 +4,12 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
+## Unreleased
+
+`var` is not a keyword any more (eider-lang #2, Eider 0.7.5): it is gone from keyword completion and from the inlay-hint
+scan (`let mut` bindings are found by their `let`), and the session goldens `dotted.out` and `malformed.out` lost the
+`var` completion item. The lexical stand-in's keyword ids follow the compiler's (30 keywords, `_` 30, `self` 31, `Self` 32).
+
 ## 0.7.2
 
 No change to the server. The session golden `tests/sessions/dotted.out` (the completion list of `std.`) lost `std.cli` and `std.log`, which left std for the libraries eider-command and eider-logging in Eider 0.7.3 (eider-lang #216, #217). An attribute declared by a package is named after it (`@[command(...)]`, like `@[json(...)]`), which the analyzer already follows.

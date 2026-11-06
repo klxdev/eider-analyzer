@@ -24,7 +24,7 @@ fn is(a: List[u8], s: str) -> bool { bytes.eq(a, sys.lit(s)) }
 // ---- names
 
 fn is_keyword(name: List[u8]) -> bool {
-    for w in ["fn", "type", "let", "var", "if", "else", "while", "for", "in", "return", "match", "true", "false", "uses", "test",
+    for w in ["fn", "type", "let", "if", "else", "while", "for", "in", "return", "match", "true", "false", "uses", "test",
         "assert", "inout", "as", "const", "module", "break", "continue", "null", "import", "trait", "impl", "pub", "comptime",
         "extern", "export", "unsafe", "_"] {
         if is(name, w) { return true }
@@ -459,7 +459,7 @@ fn hint(inout o: List[u8], pos: t.Pos, label: List[u8], kind: u64, left: bool) {
 }
 
 /// `textDocument/inlayHint` for the lines first..last (LSP, inclusive): the type of a
-/// `let`/`var` binding that has no annotation (`: Point`, from the checker's type of the
+/// `let`/`let mut` binding that has no annotation (`: Point`, from the checker's type of the
 /// binding) and the name of the parameter in front of each positional argument of a call to
 /// a function, method, variant or record constructor (`by:`), not where the argument is
 /// the parameter's own name or a named argument.
@@ -474,7 +474,7 @@ pub fn inlay_hints(r: feat.Res, first: u32, last: u32) -> List[u8] {
         if s.span.line == 0 || s.span.line - 1 < first || s.span.line - 1 > last { continue }
         let fo = t.offset_of(text, starts, s.full.line, s.full.col)
         let kw = bytes.slice(text, fo, fo + 4)
-        if !(is(kw, "let ") || is(kw, "var ")) { continue }
+        if !is(kw, "let ") { continue }
         let ne = t.offset_of(text, starts, s.span.end_line, s.span.end_col)
         let k = skip_ws(text, ne)
         if k >= text.len() || text[k] != 61 { continue }

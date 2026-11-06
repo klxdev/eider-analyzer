@@ -9,7 +9,7 @@
 // - declarations: imports (module aliases: quoted, dotted, each member of a group, package
 //   namespaces; docs/compiler.md, "C8.26"), types, record fields, variants and their named
 //   fields, functions, methods (in `impl` and `trait` blocks), constants, traits, tests,
-//   parameters (also of closures, `|inout x|`), `let`/`let mut`/`var` locals (also tuple
+//   parameters (also of closures, `|inout x|`), `let`/`let mut` locals (also tuple
 //   and variant patterns, `mut x` in them), `for` variables (`for (k, v) in m` too), match-arm
 //   bindings and type aliases (`type Handler = fn(Request) -> Response`);
 // - references: a name resolves to the innermost local declared before it whose block is
@@ -41,34 +41,33 @@ pub const TK_PUNCT: u32 = 6
 pub type Tok = { kind: u32, sym: u32, p: u32, start: u32, end: u32, line: u32, col: u32, end_col: u32 }
 
 /// A lexed file. Every file of one analysis is lexed with one interner, so a name id means
-/// the same name everywhere; keyword ids are the compiler's (intern.ei: 0..30, then `_` 31,
-/// `self` 32, `Self` 33).
+/// the same name everywhere; keyword ids are the compiler's (intern.ei: 0..29, then `_` 30,
+/// `self` 31, `Self` 32).
 pub type File = { id: u32, src: List[u8], toks: List[Tok], strs: List[List[u8]] }
 
 const K_FN: u32 = 0
 const K_TYPE: u32 = 1
 const K_LET: u32 = 2
-const K_VAR: u32 = 3
-const K_IF: u32 = 4
-const K_FOR: u32 = 7
-const K_IN: u32 = 8
-const K_USES: u32 = 13
-const K_TEST: u32 = 14
-const K_INOUT: u32 = 16
-const K_AS: u32 = 17
-const K_CONST: u32 = 18
-const K_IMPORT: u32 = 23
-const K_TRAIT: u32 = 24
-const K_IMPL: u32 = 25
-const K_PUB: u32 = 26
-const K_COMPTIME: u32 = 27
-const K_EXTERN: u32 = 28
-const K_EXPORT: u32 = 29
-const K_UNSAFE: u32 = 30
-const LAST_KEYWORD: u32 = 30
-const S_UNDERSCORE: u32 = 31
-const S_SELF: u32 = 32
-const S_SELF_TYPE: u32 = 33
+const K_IF: u32 = 3
+const K_FOR: u32 = 6
+const K_IN: u32 = 7
+const K_USES: u32 = 12
+const K_TEST: u32 = 13
+const K_INOUT: u32 = 15
+const K_AS: u32 = 16
+const K_CONST: u32 = 17
+const K_IMPORT: u32 = 22
+const K_TRAIT: u32 = 23
+const K_IMPL: u32 = 24
+const K_PUB: u32 = 25
+const K_COMPTIME: u32 = 26
+const K_EXTERN: u32 = 27
+const K_EXPORT: u32 = 28
+const K_UNSAFE: u32 = 29
+const LAST_KEYWORD: u32 = 29
+const S_UNDERSCORE: u32 = 30
+const S_SELF: u32 = 31
+const S_SELF_TYPE: u32 = 32
 
 const P_LBRACE: u32 = 123
 const P_RBRACE: u32 = 125
@@ -436,7 +435,7 @@ fn decls(inout s: St) {
             continue
         }
         // inside a function body
-        if t.kind == TK_IDENT && (t.sym == K_LET || t.sym == K_VAR) {
+        if t.kind == TK_IDENT && t.sym == K_LET {
             let_decl(inout s, i)
             continue
         }
@@ -1081,7 +1080,7 @@ fn is_variant_like(s: St, sym: u32) -> bool {
     bytes.eq(n, sys.lit("Some")) || bytes.eq(n, sys.lit("None")) || bytes.eq(n, sys.lit("Ok")) || bytes.eq(n, sys.lit("Err"))
 }
 
-/// `let`/`let mut`/`var` at `i`: a name with an optional annotation, or a pattern.
+/// `let`/`let mut` at `i`: a name with an optional annotation, or a pattern.
 fn let_decl(inout s: St, i: usize) {
     let j = if is_mut(s, i + 1) { i + 2 } else { i + 1 }
     if is_lower(s, j) && (is_p(s, j + 1, P_COLON) || is_p(s, j + 1, P_EQ)) {

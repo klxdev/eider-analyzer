@@ -214,7 +214,7 @@ pub fn hover(r: Res, p: t.Pos) -> List[u8] uses fs {
             bytes.append(inout d, analysis.module_label(r.an.files[s.span.file as usize]))
         }
         // ide.ei's detail of a local is its type
-        if s.kind == m.SK_LOCAL && !bytes.starts_with(d, s.name) && !bytes.starts_with(d, sys.lit("let")) && !bytes.starts_with(d, sys.lit("var")) && !bytes.starts_with(d, sys.lit("for")) {
+        if s.kind == m.SK_LOCAL && !bytes.starts_with(d, s.name) && !bytes.starts_with(d, sys.lit("let")) && !bytes.starts_with(d, sys.lit("for")) {
             let mut x = s.name.copy()
             bytes.append(inout x, sys.lit(": "))
             bytes.append(inout x, d)
@@ -922,7 +922,7 @@ fn namespace_of(text: List[u8], name: List[u8]) -> List[u8] {
 
 fn keywords() -> List[List[u8]] {
     let mut out: List[List[u8]] = List.new()
-    for w in ["fn", "type", "let", "var", "if", "else", "while", "for", "in", "return", "match", "true", "false", "uses", "test",
+    for w in ["fn", "type", "let", "if", "else", "while", "for", "in", "return", "match", "true", "false", "uses", "test",
         "assert", "inout", "as", "const", "break", "continue", "import", "trait", "impl", "pub", "comptime", "extern", "export", "unsafe",
         "self", "Self", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "usize", "bool", "str", "String", "List", "Map", "Box",
         "Option", "Result", "Some", "None", "Ok", "Err", "print", "panic", "len", "spawn", "Task", "Mutex", "Chan",
