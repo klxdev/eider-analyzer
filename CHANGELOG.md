@@ -4,7 +4,7 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
-## Unreleased
+## 0.7.3
 
 `var` is not a keyword any more (eider-lang #2, Eider 0.7.5): it is gone from keyword completion and from the inlay-hint
 scan (`let mut` bindings are found by their `let`), and the session goldens `dotted.out` and `malformed.out` lost the
