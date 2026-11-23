@@ -1,212 +1,243 @@
 file ${ROOT}/tests/lexical/syntax.ei
 file ${EIDER_LANG}/std/fs.ei
-sym 0 type Kind 1:7:10-7:14 1:7:1-7:54 in - | pub type Kind = | Missing | File | Dir | Link | Other
-sym 1 variant Missing 1:7:19-7:26 1:7:19-7:26 in 0 | Kind.Missing
-sym 2 variant File 1:7:29-7:33 1:7:29-7:33 in 0 | Kind.File
-sym 3 variant Dir 1:7:36-7:39 1:7:36-7:39 in 0 | Kind.Dir
-sym 4 variant Link 1:7:42-7:46 1:7:42-7:46 in 0 | Kind.Link
-sym 5 variant Other 1:7:49-7:54 1:7:49-7:54 in 0 | Kind.Other
-sym 6 function read 1:24:8-24:12 1:24:1-29:2 in - | pub fn read(path: List[u8]) -> Result[List[u8], String] uses fs
-sym 7 function write 1:41:8-41:13 1:41:1-41:104 in - | pub fn write(path: List[u8], data: List[u8]) -> Result[bool, String] uses fs
-sym 8 function append 1:42:8-42:14 1:42:1-42:104 in - | pub fn append(path: List[u8], data: List[u8]) -> Result[bool, String] uses fs
-sym 9 function kind 1:44:8-44:12 1:44:1-53:2 in - | pub fn kind(path: List[u8]) -> Kind uses fs
-sym 10 function exists 1:55:8-55:14 1:55:1-60:2 in - | pub fn exists(path: List[u8]) -> bool uses fs
-sym 11 function is_dir 1:63:8-63:14 1:63:1-66:2 in - | pub fn is_dir(path: List[u8]) -> bool uses fs
-sym 12 function list 1:69:8-69:12 1:69:1-74:2 in - | pub fn list(path: List[u8]) -> Result[List[List[u8]], String] uses fs
-sym 13 function sort 1:77:8-77:12 1:77:1-90:2 in - | pub fn sort(xs: List[List[u8]]) -> List[List[u8]]
-sym 14 function mkdir_all 1:93:8-93:17 1:93:1-105:2 in - | pub fn mkdir_all(path: List[u8]) -> Result[bool, String] uses fs
-sym 15 function remove_all 1:109:8-109:18 1:109:1-124:2 in - | pub fn remove_all(path: List[u8]) -> Result[bool, String] uses fs
-sym 16 function symlink 1:127:8-127:15 1:127:1-135:2 in - | pub fn symlink(target: List[u8], link: List[u8]) -> Result[bool, String] uses fs
-sym 17 function cwd 1:137:8-137:11 1:137:1-141:2 in - | pub fn cwd() -> Result[List[u8], String] uses fs
-sym 18 function absolute 1:144:8-144:16 1:144:1-147:2 in - | pub fn absolute(p: List[u8]) -> Result[List[u8], String] uses fs
-sym 19 function canonical 1:150:8-150:17 1:150:1-155:2 in - | pub fn canonical(p: List[u8]) -> Result[List[u8], String] uses fs
-sym 20 function normalize 1:158:8-158:17 1:158:1-181:2 in - | pub fn normalize(p: List[u8]) -> List[u8]
-sym 21 function rename 1:183:8-183:14 1:183:1-191:2 in - | pub fn rename(from: List[u8], to: List[u8]) -> Result[bool, String] uses fs
-sym 22 function copy_all 1:194:8-194:16 1:194:1-209:2 in - | pub fn copy_all(from: List[u8], to: List[u8], skip: List[List[u8]]) -> Result[bool, String] uses fs
-sym 23 function walk 1:212:8-212:12 1:212:1-217:2 in - | pub fn walk(root: List[u8], skip: List[List[u8]]) -> Result[List[List[u8]], String] uses fs
-sym 24 function join 1:240:8-240:12 1:240:1-246:2 in - | pub fn join(a: List[u8], b: List[u8]) -> List[u8]
-sym 25 function dirname 1:249:8-249:15 1:249:1-263:2 in - | pub fn dirname(p: List[u8]) -> List[u8]
-sym 26 module fs 1:1:1-1:1 1:1:1-1:1 in - | ${EIDER_LANG}/std/fs.ei
-sym 27 module fs 0:3:8-3:16 0:3:1-3:16 in - | import "std/fs"
-sym 28 type Handler 0:5:6-5:13 0:5:1-5:42 in - | type Handler = fn(inout i32, i32) -> bool
-sym 29 type Pairs 0:6:6-6:11 0:6:1-6:32 in - | type Pairs[K, V] = List[(K, V)]
-sym 30 type Counter 0:8:6-8:13 0:8:1-8:62 in - | type Counter = { n: i32, step: Handler, log: Ref[List[i32]] }
-sym 31 field n 0:8:18-8:19 0:8:18-8:24 in 30 | n: i32
-sym 32 field step 0:8:26-8:30 0:8:26-8:39 in 30 | step: Handler
-sym 33 field log 0:8:41-8:44 0:8:41-8:60 in 30 | log: Ref[List[i32]]
-sym 34 type Size 0:10:6-10:10 0:10:1-10:28 in - | type Size = | Small | Large
-sym 35 variant Small 0:10:15-10:20 0:10:15-10:20 in 34 | Size.Small
-sym 36 variant Large 0:10:23-10:28 0:10:23-10:28 in 34 | Size.Large
-sym 37 method default 0:13:8-13:15 0:13:5-13:35 in 34 | fn default() -> Size
-sym 38 type AppError 0:16:6-16:14 0:16:1-16:37 in - | type AppError = | Parse(i32) | Other
-sym 39 variant Parse 0:16:19-16:24 0:16:19-16:29 in 38 | AppError.Parse(i32)
-sym 40 variant Other 0:16:32-16:37 0:16:32-16:37 in 38 | AppError.Other
-sym 41 method from 0:19:8-19:12 0:19:5-19:53 in 38 | fn from(value: i32) -> AppError
-sym 42 parameter value 0:19:13-19:18 0:19:13-19:18 in 41 | value: i32
-sym 43 function parse 0:22:4-22:9 0:22:1-25:2 in - | fn parse(n: i32) -> Result[i32, i32]
-sym 44 parameter n 0:22:10-22:11 0:22:10-22:11 in 43 | n: i32
-sym 45 function run 0:27:4-27:7 0:27:1-31:2 in - | fn run(n: i32) -> Result[(), AppError]
-sym 46 parameter n 0:27:8-27:9 0:27:8-27:9 in 45 | n: i32
-sym 47 local v 0:28:9-28:10 0:28:9-28:10 in 45 | let v
-sym 48 function bump 0:33:4-33:8 0:33:1-36:2 in - | fn bump(inout x: i32, by: i32) -> bool
-sym 49 parameter x 0:33:15-33:16 0:33:15-33:16 in 48 | inout x: i32
-sym 50 parameter by 0:33:23-33:25 0:33:23-33:25 in 48 | by: i32
-sym 51 function bits 0:38:4-38:8 0:38:1-46:2 in - | fn bits(x: u32) -> u32
-sym 52 parameter x 0:38:9-38:10 0:38:9-38:10 in 51 | x: u32
-sym 53 local y 0:39:13-39:14 0:39:13-39:14 in 51 | let mut y
-sym 54 function main 0:48:4-48:8 0:48:1-112:2 in - | fn main() uses io
-sym 55 local total 0:49:13-49:18 0:49:13-49:18 in 54 | let mut total
-sym 56 local pairs 0:50:13-50:18 0:50:13-50:18 in 54 | let mut pairs: Pairs[str, i32]
-sym 57 local k 0:52:10-52:11 0:52:10-52:11 in 54 | for (k, v)
-sym 58 local v 0:52:13-52:14 0:52:13-52:14 in 54 | for (k, v)
-sym 59 local m 0:56:13-56:14 0:56:13-56:14 in 54 | let mut m: Map[String, i32]
-sym 60 local k 0:58:10-58:11 0:58:10-58:11 in 54 | for (k, v)
-sym 61 local v 0:58:13-58:14 0:58:13-58:14 in 54 | for (k, v)
-sym 62 local a 0:62:14-62:15 0:62:14-62:15 in 54 | let (mut a
-sym 63 local b 0:62:17-62:18 0:62:17-62:18 in 54 | let (mut a, b
-sym 64 local stack 0:64:13-64:18 0:64:13-64:18 in 54 | let mut stack: List[i32]
-sym 65 local top 0:66:20-66:23 0:66:20-66:23 in 54 | let Some(top
-sym 66 local i 0:69:15-69:16 0:69:15-69:16 in 54 | for i
-sym 67 local j 0:70:19-70:20 0:70:19-70:20 in 54 | for j
-sym 68 local r 0:76:9-76:10 0:76:9-76:10 in 54 | let r: Ref
-sym 69 parameter n 0:77:21-77:22 0:77:21-77:22 in 54 | inout n: i32
-sym 70 local c 0:78:9-78:10 0:78:9-78:10 in 54 | let c: Counter
-sym 71 parameter x 0:78:31-78:32 0:78:31-78:32 in 54 | inout x: i32
-sym 72 parameter by 0:78:39-78:41 0:78:39-78:41 in 54 | by: i32
-sym 73 local seen 0:80:13-80:17 0:80:13-80:17 in 54 | let mut seen
-sym 74 local words 0:83:9-83:14 0:83:9-83:14 in 54 | let words
-sym 75 local s 0:84:9-84:10 0:84:9-84:10 in 54 | let s: String
-sym 76 local size 0:86:9-86:13 0:86:9-86:13 in 54 | let size: Size
-sym 77 local o 0:87:9-87:10 0:87:9-87:10 in 54 | let o
-sym 78 local taken 0:96:13-96:18 0:96:13-96:18 in 54 | let mut taken: Option[i32]
-sym 79 local old 0:97:9-97:12 0:97:9-97:12 in 54 | let old
-sym 80 local classed 0:99:9-99:16 0:99:9-99:16 in 54 | let classed
-sym 81 local q 0:101:9-101:10 0:101:9-101:10 in 54 | q
-sym 82 local q 0:101:14-101:15 0:101:14-101:15 in 54 | q
-sym 83 local shown 0:105:9-105:14 0:105:9-105:14 in 54 | let shown
-sym 84 local raw 0:106:9-106:12 0:106:9-106:12 in 54 | let raw
-sym 85 local text 0:107:9-107:13 0:107:9-107:13 in 54 | let text
-sym 86 trait Source 0:116:7-116:13 0:116:1-119:2 in - | trait Source
-sym 87 type Item 0:117:10-117:14 0:117:5-117:14 in 86 | type Item
-sym 88 method pull 0:118:8-118:12 0:118:5-118:39 in 86 | fn pull(self) -> Option[Self.Item]
-sym 89 parameter self 0:118:13-118:17 0:118:13-118:17 in 88 | self
-sym 90 type Ones 0:121:6-121:10 0:121:1-121:23 in - | type Ones = { n: i32 }
-sym 91 field n 0:121:15-121:16 0:121:15-121:21 in 90 | n: i32
-sym 92 method pull 0:125:8-125:12 0:125:5-125:56 in 90 | fn pull(self) -> Option[Self.Item]
-sym 93 parameter self 0:125:13-125:17 0:125:13-125:17 in 92 | self
-sym 94 function pulled 0:128:4-128:10 0:128:1-128:58 in - | fn pulled[S: Source](s: S) -> Option[S.Item]
-sym 95 parameter s 0:128:22-128:23 0:128:22-128:23 in 94 | s: S
-sym 96 function mean 0:133:4-133:8 0:133:1-133:49 in - | fn mean(a: f64, b: f64) -> f64
-sym 97 parameter a 0:133:9-133:10 0:133:9-133:10 in 96 | a: f64
-sym 98 parameter b 0:133:17-133:18 0:133:17-133:18 in 96 | b: f64
-sym 99 function scaled 0:135:4-135:10 0:135:1-135:50 in - | fn scaled(x: f32) -> f32
-sym 100 parameter x 0:135:11-135:12 0:135:11-135:12 in 99 | x: f32
-sym 101 function trunc 0:137:4-137:9 0:137:1-137:45 in - | fn trunc(x: f64) -> i32
-sym 102 parameter x 0:137:10-137:11 0:137:10-137:11 in 101 | x: f64
-sym 103 function each 0:140:4-140:8 0:140:1-140:72 in - | fn each[uses E](f: fn() uses E, g: fn() uses io + clock) uses E
-sym 104 parameter f 0:140:17-140:18 0:140:17-140:18 in 103 | f: fn() uses E
-sym 105 parameter g 0:140:33-140:34 0:140:33-140:34 in 103 | g: fn() uses io + clock
-sym 106 trait Shape 0:142:7-142:12 0:142:1-144:2 in - | trait Shape
-sym 107 method area 0:143:8-143:12 0:143:5-143:25 in 106 | fn area(self) -> i64
-sym 108 parameter self 0:143:13-143:17 0:143:13-143:17 in 107 | self
-sym 109 function total 0:146:4-146:9 0:146:1-146:72 in - | fn total(shapes: List[dyn Shape], one: dyn Shape) -> i64
-sym 110 parameter shapes 0:146:10-146:16 0:146:10-146:16 in 109 | shapes: List[dyn Shape]
-sym 111 parameter one 0:146:35-146:38 0:146:35-146:38 in 109 | one: dyn Shape
-ref 0:8:32-8:39 -> 28
-ref 0:12:18-12:22 -> 34
-ref 0:13:21-13:25 -> 34
-ref 0:13:28-13:33 -> 35
-ref 0:18:20-18:28 -> 38
-ref 0:19:28-19:36 -> 38
-ref 0:19:39-19:44 -> 39
-ref 0:19:45-19:50 -> 42
-ref 0:23:8-23:9 -> 44
-ref 0:23:27-23:28 -> 44
-ref 0:24:8-24:9 -> 44
-ref 0:27:30-27:38 -> 38
-ref 0:28:13-28:18 -> 43
-ref 0:28:19-28:20 -> 46
-ref 0:29:8-29:9 -> 47
-ref 0:29:28-29:33 -> 40
-ref 0:34:5-34:6 -> 49
-ref 0:34:10-34:12 -> 50
-ref 0:35:6-35:7 -> 49
-ref 0:39:18-39:19 -> 52
-ref 0:40:5-40:6 -> 53
-ref 0:41:5-41:6 -> 53
-ref 0:41:10-41:11 -> 52
-ref 0:42:5-42:6 -> 53
-ref 0:43:5-43:6 -> 53
-ref 0:44:5-44:6 -> 53
-ref 0:45:5-45:6 -> 53
-ref 0:50:20-50:25 -> 29
-ref 0:51:5-51:10 -> 56
-ref 0:52:19-52:24 -> 56
-ref 0:53:15-53:16 -> 57
-ref 0:54:9-54:14 -> 55
-ref 0:54:18-54:19 -> 58
-ref 0:57:5-57:6 -> 59
-ref 0:58:19-58:20 -> 59
-ref 0:59:15-59:16 -> 60
-ref 0:60:9-60:14 -> 55
-ref 0:60:18-60:19 -> 61
-ref 0:63:5-63:6 -> 62
-ref 0:63:10-63:11 -> 63
-ref 0:65:5-65:10 -> 64
-ref 0:66:27-66:32 -> 64
-ref 0:67:9-67:14 -> 55
-ref 0:67:18-67:21 -> 65
-ref 0:71:16-71:17 -> 67
-ref 0:72:16-72:17 -> 66
-ref 0:73:16-73:17 -> 67
-ref 0:73:20-73:21 -> 66
-ref 0:77:5-77:6 -> 68
-ref 0:77:31-77:32 -> 69
-ref 0:78:13-78:20 -> 30
-ref 0:78:50-78:51 -> 71
-ref 0:78:55-78:57 -> 72
-ref 0:81:8-81:9 -> 70
-ref 0:81:10-81:14 -> 32
-ref 0:81:21-81:25 -> 73
-ref 0:81:32-81:37 -> 55
-ref 0:82:8-82:12 -> 48
-ref 0:82:19-82:23 -> 73
-ref 0:82:30-82:35 -> 55
-ref 0:84:20-84:27 -> 37
-ref 0:86:15-86:19 -> 34
-ref 0:86:22-86:26 -> 34
-ref 0:86:27-86:34 -> 37
-ref 0:88:11-88:12 -> 77
-ref 0:92:11-92:14 -> 45
-ref 0:97:15-97:20 -> 78
-ref 0:99:25-99:30 -> 55
-ref 0:101:25-101:26 -> 82
-ref 0:105:19-105:24 -> 55
-ref 0:105:30-105:35 -> 74
-ref 0:110:11-110:16 -> 55
-ref 0:110:19-110:20 -> 62
-ref 0:110:23-110:27 -> 51
-ref 0:110:40-110:43 -> 79
-ref 0:110:46-110:47 -> 68
-ref 0:110:56-110:61 -> 74
-ref 0:110:77-110:78 -> 75
-ref 0:111:11-111:15 -> 76
-ref 0:123:6-123:12 -> 86
-ref 0:123:17-123:21 -> 90
-ref 0:124:10-124:14 -> 87
-ref 0:125:47-125:51 -> 93
-ref 0:125:52-125:53 -> 91
-ref 0:128:14-128:20 -> 86
-ref 0:128:48-128:49 -> 95
-ref 0:133:35-133:36 -> 97
-ref 0:133:39-133:40 -> 98
-ref 0:135:28-135:29 -> 100
-ref 0:137:28-137:29 -> 102
-ref 0:140:67-140:68 -> 104
-ref 0:146:27-146:32 -> 106
-ref 0:146:44-146:49 -> 106
-ref 0:146:60-146:63 -> 111
-ref 0:146:64-146:68 -> 107
+sym 0 type Kind 1:10:10-10:14 1:10:1-10:54 in - | pub type Kind = | Missing | File | Dir | Link | Other
+sym 1 variant Missing 1:10:19-10:26 1:10:19-10:26 in 0 | Kind.Missing
+sym 2 variant File 1:10:29-10:33 1:10:29-10:33 in 0 | Kind.File
+sym 3 variant Dir 1:10:36-10:39 1:10:36-10:39 in 0 | Kind.Dir
+sym 4 variant Link 1:10:42-10:46 1:10:42-10:46 in 0 | Kind.Link
+sym 5 variant Other 1:10:49-10:54 1:10:49-10:54 in 0 | Kind.Other
+sym 6 function read 1:27:8-27:12 1:27:1-32:2 in - | pub fn read(path: List[u8]) -> Result[List[u8], String] uses fs
+sym 7 function write 1:44:8-44:13 1:44:1-44:104 in - | pub fn write(path: List[u8], data: List[u8]) -> Result[bool, String] uses fs
+sym 8 function append 1:45:8-45:14 1:45:1-45:104 in - | pub fn append(path: List[u8], data: List[u8]) -> Result[bool, String] uses fs
+sym 9 function stat 1:53:8-53:12 1:53:1-53:92 in - | pub fn stat(path: List[u8]) -> Result[fd.Stat, String] uses fs
+sym 10 function lstat 1:56:8-56:13 1:56:1-56:94 in - | pub fn lstat(path: List[u8]) -> Result[fd.Stat, String] uses fs
+sym 11 function read_range 1:62:8-62:18 1:62:1-82:2 in - | pub fn read_range(path: List[u8], offset: i64, max: i64) -> Result[List[u8], String] uses io, fs
+sym 12 type FsStats 1:86:10-86:17 1:86:1-86:156 in - | pub type FsStats = { block_size: i64, total_bytes: i64, free_bytes: i64, available_bytes: i64, total_inodes: i64, free_inodes: i64, available_inodes: i64 }
+sym 13 field block_size 1:86:22-86:32 1:86:22-86:37 in 12 | block_size: i64
+sym 14 field total_bytes 1:86:39-86:50 1:86:39-86:55 in 12 | total_bytes: i64
+sym 15 field free_bytes 1:86:57-86:67 1:86:57-86:72 in 12 | free_bytes: i64
+sym 16 field available_bytes 1:86:74-86:89 1:86:74-86:94 in 12 | available_bytes: i64
+sym 17 field total_inodes 1:86:96-86:108 1:86:96-86:113 in 12 | total_inodes: i64
+sym 18 field free_inodes 1:86:115-86:126 1:86:115-86:131 in 12 | free_inodes: i64
+sym 19 field available_inodes 1:86:133-86:149 1:86:133-86:154 in 12 | available_inodes: i64
+sym 20 function statvfs 1:89:8-89:15 1:89:1-96:2 in - | pub fn statvfs(path: List[u8]) -> Result[FsStats, String] uses fs
+sym 21 function chmod 1:128:8-128:13 1:128:1-134:2 in - | pub fn chmod(path: List[u8], mode: u32) -> Result[bool, String] uses fs
+sym 22 function write_mode 1:151:8-151:18 1:151:1-151:131 in - | pub fn write_mode(path: List[u8], data: List[u8], mode: u32) -> Result[bool, String] uses fs
+sym 23 function append_mode 1:154:8-154:19 1:154:1-154:131 in - | pub fn append_mode(path: List[u8], data: List[u8], mode: u32) -> Result[bool, String] uses fs
+sym 24 type Lock 1:163:10-163:14 1:163:1-163:28 in - | pub type Lock = { fd: i32 }
+sym 25 field fd 1:163:19-163:21 1:163:19-163:26 in 24 | fd: i32
+sym 26 method drop 1:166:8-166:12 1:166:5-168:6 in 24 | fn drop(inout self)
+sym 27 function lock 1:199:8-199:12 1:199:1-208:2 in - | pub fn lock(path: List[u8], exclusive: bool) -> Result[Lock, String] uses fs
+sym 28 function try_lock 1:211:8-211:16 1:211:1-224:2 in - | pub fn try_lock(path: List[u8], exclusive: bool) -> Result[Option[Lock], String] uses fs
+sym 29 function lock_until 1:229:8-229:18 1:229:1-250:2 in - | pub fn lock_until(path: List[u8], exclusive: bool, dl: time.Deadline) -> Result[Option[Lock], String] uses fs, clock
+sym 30 function kind 1:252:8-252:12 1:252:1-261:2 in - | pub fn kind(path: List[u8]) -> Kind uses fs
+sym 31 function exists 1:263:8-263:14 1:263:1-268:2 in - | pub fn exists(path: List[u8]) -> bool uses fs
+sym 32 function is_dir 1:271:8-271:14 1:271:1-274:2 in - | pub fn is_dir(path: List[u8]) -> bool uses fs
+sym 33 function list 1:277:8-277:12 1:277:1-282:2 in - | pub fn list(path: List[u8]) -> Result[List[List[u8]], String] uses fs
+sym 34 function sort 1:285:8-285:12 1:285:1-298:2 in - | pub fn sort(xs: List[List[u8]]) -> List[List[u8]]
+sym 35 function mkdir_all 1:301:8-301:17 1:301:1-313:2 in - | pub fn mkdir_all(path: List[u8]) -> Result[bool, String] uses fs
+sym 36 function remove_all 1:317:8-317:18 1:317:1-332:2 in - | pub fn remove_all(path: List[u8]) -> Result[bool, String] uses fs
+sym 37 function symlink 1:335:8-335:15 1:335:1-343:2 in - | pub fn symlink(target: List[u8], link: List[u8]) -> Result[bool, String] uses fs
+sym 38 function cwd 1:345:8-345:11 1:345:1-349:2 in - | pub fn cwd() -> Result[List[u8], String] uses fs
+sym 39 function absolute 1:352:8-352:16 1:352:1-355:2 in - | pub fn absolute(p: List[u8]) -> Result[List[u8], String] uses fs
+sym 40 function canonical 1:358:8-358:17 1:358:1-363:2 in - | pub fn canonical(p: List[u8]) -> Result[List[u8], String] uses fs
+sym 41 function normalize 1:366:8-366:17 1:366:1-389:2 in - | pub fn normalize(p: List[u8]) -> List[u8]
+sym 42 function rename 1:391:8-391:14 1:391:1-399:2 in - | pub fn rename(from: List[u8], to: List[u8]) -> Result[bool, String] uses fs
+sym 43 function copy_all 1:402:8-402:16 1:402:1-417:2 in - | pub fn copy_all(from: List[u8], to: List[u8], skip: List[List[u8]]) -> Result[bool, String] uses fs
+sym 44 function walk 1:420:8-420:12 1:420:1-425:2 in - | pub fn walk(root: List[u8], skip: List[List[u8]]) -> Result[List[List[u8]], String] uses fs
+sym 45 function join 1:448:8-448:12 1:448:1-454:2 in - | pub fn join(a: List[u8], b: List[u8]) -> List[u8]
+sym 46 function dirname 1:457:8-457:15 1:457:1-471:2 in - | pub fn dirname(p: List[u8]) -> List[u8]
+sym 47 module fs 1:1:1-1:1 1:1:1-1:1 in - | ${EIDER_LANG}/std/fs.ei
+sym 48 module fs 0:3:8-3:16 0:3:1-3:16 in - | import "std/fs"
+sym 49 type Handler 0:5:6-5:13 0:5:1-5:42 in - | type Handler = fn(inout i32, i32) -> bool
+sym 50 type Pairs 0:6:6-6:11 0:6:1-6:32 in - | type Pairs[K, V] = List[(K, V)]
+sym 51 type Counter 0:8:6-8:13 0:8:1-8:62 in - | type Counter = { n: i32, step: Handler, log: Ref[List[i32]] }
+sym 52 field n 0:8:18-8:19 0:8:18-8:24 in 51 | n: i32
+sym 53 field step 0:8:26-8:30 0:8:26-8:39 in 51 | step: Handler
+sym 54 field log 0:8:41-8:44 0:8:41-8:60 in 51 | log: Ref[List[i32]]
+sym 55 type Size 0:10:6-10:10 0:10:1-10:28 in - | type Size = | Small | Large
+sym 56 variant Small 0:10:15-10:20 0:10:15-10:20 in 55 | Size.Small
+sym 57 variant Large 0:10:23-10:28 0:10:23-10:28 in 55 | Size.Large
+sym 58 method default 0:13:8-13:15 0:13:5-13:35 in 55 | fn default() -> Size
+sym 59 type AppError 0:16:6-16:14 0:16:1-16:37 in - | type AppError = | Parse(i32) | Other
+sym 60 variant Parse 0:16:19-16:24 0:16:19-16:29 in 59 | AppError.Parse(i32)
+sym 61 variant Other 0:16:32-16:37 0:16:32-16:37 in 59 | AppError.Other
+sym 62 method from 0:19:8-19:12 0:19:5-19:53 in 59 | fn from(value: i32) -> AppError
+sym 63 parameter value 0:19:13-19:18 0:19:13-19:18 in 62 | value: i32
+sym 64 function parse 0:22:4-22:9 0:22:1-25:2 in - | fn parse(n: i32) -> Result[i32, i32]
+sym 65 parameter n 0:22:10-22:11 0:22:10-22:11 in 64 | n: i32
+sym 66 function run 0:27:4-27:7 0:27:1-31:2 in - | fn run(n: i32) -> Result[(), AppError]
+sym 67 parameter n 0:27:8-27:9 0:27:8-27:9 in 66 | n: i32
+sym 68 local v 0:28:9-28:10 0:28:9-28:10 in 66 | let v
+sym 69 function bump 0:33:4-33:8 0:33:1-36:2 in - | fn bump(inout x: i32, by: i32) -> bool
+sym 70 parameter x 0:33:15-33:16 0:33:15-33:16 in 69 | inout x: i32
+sym 71 parameter by 0:33:23-33:25 0:33:23-33:25 in 69 | by: i32
+sym 72 function bits 0:38:4-38:8 0:38:1-46:2 in - | fn bits(x: u32) -> u32
+sym 73 parameter x 0:38:9-38:10 0:38:9-38:10 in 72 | x: u32
+sym 74 local y 0:39:13-39:14 0:39:13-39:14 in 72 | let mut y
+sym 75 function main 0:48:4-48:8 0:48:1-112:2 in - | fn main() uses io
+sym 76 local total 0:49:13-49:18 0:49:13-49:18 in 75 | let mut total
+sym 77 local pairs 0:50:13-50:18 0:50:13-50:18 in 75 | let mut pairs: Pairs[str, i32]
+sym 78 local k 0:52:10-52:11 0:52:10-52:11 in 75 | for (k, v)
+sym 79 local v 0:52:13-52:14 0:52:13-52:14 in 75 | for (k, v)
+sym 80 local m 0:56:13-56:14 0:56:13-56:14 in 75 | let mut m: Map[String, i32]
+sym 81 local k 0:58:10-58:11 0:58:10-58:11 in 75 | for (k, v)
+sym 82 local v 0:58:13-58:14 0:58:13-58:14 in 75 | for (k, v)
+sym 83 local a 0:62:14-62:15 0:62:14-62:15 in 75 | let (mut a
+sym 84 local b 0:62:17-62:18 0:62:17-62:18 in 75 | let (mut a, b
+sym 85 local stack 0:64:13-64:18 0:64:13-64:18 in 75 | let mut stack: List[i32]
+sym 86 local top 0:66:20-66:23 0:66:20-66:23 in 75 | let Some(top
+sym 87 local i 0:69:15-69:16 0:69:15-69:16 in 75 | for i
+sym 88 local j 0:70:19-70:20 0:70:19-70:20 in 75 | for j
+sym 89 local r 0:76:9-76:10 0:76:9-76:10 in 75 | let r: Ref
+sym 90 parameter n 0:77:21-77:22 0:77:21-77:22 in 75 | inout n: i32
+sym 91 local c 0:78:9-78:10 0:78:9-78:10 in 75 | let c: Counter
+sym 92 parameter x 0:78:31-78:32 0:78:31-78:32 in 75 | inout x: i32
+sym 93 parameter by 0:78:39-78:41 0:78:39-78:41 in 75 | by: i32
+sym 94 local seen 0:80:13-80:17 0:80:13-80:17 in 75 | let mut seen
+sym 95 local words 0:83:9-83:14 0:83:9-83:14 in 75 | let words
+sym 96 local s 0:84:9-84:10 0:84:9-84:10 in 75 | let s: String
+sym 97 local size 0:86:9-86:13 0:86:9-86:13 in 75 | let size: Size
+sym 98 local o 0:87:9-87:10 0:87:9-87:10 in 75 | let o
+sym 99 local taken 0:96:13-96:18 0:96:13-96:18 in 75 | let mut taken: Option[i32]
+sym 100 local old 0:97:9-97:12 0:97:9-97:12 in 75 | let old
+sym 101 local classed 0:99:9-99:16 0:99:9-99:16 in 75 | let classed
+sym 102 local q 0:101:9-101:10 0:101:9-101:10 in 75 | q
+sym 103 local q 0:101:14-101:15 0:101:14-101:15 in 75 | q
+sym 104 local shown 0:105:9-105:14 0:105:9-105:14 in 75 | let shown
+sym 105 local raw 0:106:9-106:12 0:106:9-106:12 in 75 | let raw
+sym 106 local text 0:107:9-107:13 0:107:9-107:13 in 75 | let text
+sym 107 trait Source 0:116:7-116:13 0:116:1-119:2 in - | trait Source
+sym 108 type Item 0:117:10-117:14 0:117:5-117:14 in 107 | type Item
+sym 109 method pull 0:118:8-118:12 0:118:5-118:39 in 107 | fn pull(self) -> Option[Self.Item]
+sym 110 parameter self 0:118:13-118:17 0:118:13-118:17 in 109 | self
+sym 111 type Ones 0:121:6-121:10 0:121:1-121:23 in - | type Ones = { n: i32 }
+sym 112 field n 0:121:15-121:16 0:121:15-121:21 in 111 | n: i32
+sym 113 method pull 0:125:8-125:12 0:125:5-125:56 in 111 | fn pull(self) -> Option[Self.Item]
+sym 114 parameter self 0:125:13-125:17 0:125:13-125:17 in 113 | self
+sym 115 function pulled 0:128:4-128:10 0:128:1-128:58 in - | fn pulled[S: Source](s: S) -> Option[S.Item]
+sym 116 parameter s 0:128:22-128:23 0:128:22-128:23 in 115 | s: S
+sym 117 function mean 0:133:4-133:8 0:133:1-133:49 in - | fn mean(a: f64, b: f64) -> f64
+sym 118 parameter a 0:133:9-133:10 0:133:9-133:10 in 117 | a: f64
+sym 119 parameter b 0:133:17-133:18 0:133:17-133:18 in 117 | b: f64
+sym 120 function scaled 0:135:4-135:10 0:135:1-135:50 in - | fn scaled(x: f32) -> f32
+sym 121 parameter x 0:135:11-135:12 0:135:11-135:12 in 120 | x: f32
+sym 122 function trunc 0:137:4-137:9 0:137:1-137:45 in - | fn trunc(x: f64) -> i32
+sym 123 parameter x 0:137:10-137:11 0:137:10-137:11 in 122 | x: f64
+sym 124 function each 0:140:4-140:8 0:140:1-140:72 in - | fn each[uses E](f: fn() uses E, g: fn() uses io + clock) uses E
+sym 125 parameter f 0:140:17-140:18 0:140:17-140:18 in 124 | f: fn() uses E
+sym 126 parameter g 0:140:33-140:34 0:140:33-140:34 in 124 | g: fn() uses io + clock
+sym 127 trait Shape 0:142:7-142:12 0:142:1-144:2 in - | trait Shape
+sym 128 method area 0:143:8-143:12 0:143:5-143:25 in 127 | fn area(self) -> i64
+sym 129 parameter self 0:143:13-143:17 0:143:13-143:17 in 128 | self
+sym 130 function total 0:146:4-146:9 0:146:1-146:72 in - | fn total(shapes: List[dyn Shape], one: dyn Shape) -> i64
+sym 131 parameter shapes 0:146:10-146:16 0:146:10-146:16 in 130 | shapes: List[dyn Shape]
+sym 132 parameter one 0:146:35-146:38 0:146:35-146:38 in 130 | one: dyn Shape
+ref 0:8:32-8:39 -> 49
+ref 0:12:18-12:22 -> 55
+ref 0:13:21-13:25 -> 55
+ref 0:13:28-13:33 -> 56
+ref 0:18:20-18:28 -> 59
+ref 0:19:28-19:36 -> 59
+ref 0:19:39-19:44 -> 60
+ref 0:19:45-19:50 -> 63
+ref 0:23:8-23:9 -> 65
+ref 0:23:27-23:28 -> 65
+ref 0:24:8-24:9 -> 65
+ref 0:27:30-27:38 -> 59
+ref 0:28:13-28:18 -> 64
+ref 0:28:19-28:20 -> 67
+ref 0:29:8-29:9 -> 68
+ref 0:29:28-29:33 -> 61
+ref 0:34:5-34:6 -> 70
+ref 0:34:10-34:12 -> 71
+ref 0:35:6-35:7 -> 70
+ref 0:39:18-39:19 -> 73
+ref 0:40:5-40:6 -> 74
+ref 0:41:5-41:6 -> 74
+ref 0:41:10-41:11 -> 73
+ref 0:42:5-42:6 -> 74
+ref 0:43:5-43:6 -> 74
+ref 0:44:5-44:6 -> 74
+ref 0:45:5-45:6 -> 74
+ref 0:50:20-50:25 -> 50
+ref 0:51:5-51:10 -> 77
+ref 0:52:19-52:24 -> 77
+ref 0:53:15-53:16 -> 78
+ref 0:54:9-54:14 -> 76
+ref 0:54:18-54:19 -> 79
+ref 0:57:5-57:6 -> 80
+ref 0:58:19-58:20 -> 80
+ref 0:59:15-59:16 -> 81
+ref 0:60:9-60:14 -> 76
+ref 0:60:18-60:19 -> 82
+ref 0:63:5-63:6 -> 83
+ref 0:63:10-63:11 -> 84
+ref 0:65:5-65:10 -> 85
+ref 0:66:27-66:32 -> 85
+ref 0:67:9-67:14 -> 76
+ref 0:67:18-67:21 -> 86
+ref 0:71:16-71:17 -> 88
+ref 0:72:16-72:17 -> 87
+ref 0:73:16-73:17 -> 88
+ref 0:73:20-73:21 -> 87
+ref 0:77:5-77:6 -> 89
+ref 0:77:31-77:32 -> 90
+ref 0:78:13-78:20 -> 51
+ref 0:78:50-78:51 -> 92
+ref 0:78:55-78:57 -> 93
+ref 0:81:8-81:9 -> 91
+ref 0:81:10-81:14 -> 53
+ref 0:81:21-81:25 -> 94
+ref 0:81:32-81:37 -> 76
+ref 0:82:8-82:12 -> 69
+ref 0:82:19-82:23 -> 94
+ref 0:82:30-82:35 -> 76
+ref 0:84:20-84:27 -> 58
+ref 0:86:15-86:19 -> 55
+ref 0:86:22-86:26 -> 55
+ref 0:86:27-86:34 -> 58
+ref 0:88:11-88:12 -> 98
+ref 0:92:11-92:14 -> 66
+ref 0:97:15-97:20 -> 99
+ref 0:99:25-99:30 -> 76
+ref 0:101:25-101:26 -> 103
+ref 0:105:19-105:24 -> 76
+ref 0:105:30-105:35 -> 95
+ref 0:110:11-110:16 -> 76
+ref 0:110:19-110:20 -> 83
+ref 0:110:23-110:27 -> 72
+ref 0:110:40-110:43 -> 100
+ref 0:110:46-110:47 -> 89
+ref 0:110:56-110:61 -> 95
+ref 0:110:77-110:78 -> 96
+ref 0:111:11-111:15 -> 97
+ref 0:123:6-123:12 -> 107
+ref 0:123:17-123:21 -> 111
+ref 0:124:10-124:14 -> 108
+ref 0:125:47-125:51 -> 114
+ref 0:125:52-125:53 -> 112
+ref 0:128:14-128:20 -> 107
+ref 0:128:48-128:49 -> 116
+ref 0:133:35-133:36 -> 118
+ref 0:133:39-133:40 -> 119
+ref 0:135:28-135:29 -> 121
+ref 0:137:28-137:29 -> 123
+ref 0:140:67-140:68 -> 125
+ref 0:146:27-146:32 -> 127
+ref 0:146:44-146:49 -> 127
+ref 0:146:60-146:63 -> 132
+ref 0:146:64-146:68 -> 128
+type 1:86:22-86:32 i64
+type 1:86:39-86:50 i64
+type 1:86:57-86:67 i64
+type 1:86:74-86:89 i64
+type 1:86:96-86:108 i64
+type 1:86:115-86:126 i64
+type 1:86:133-86:149 i64
+type 1:98:7-98:14 i64
+type 1:115:7-115:15 u32
+type 1:163:19-163:21 i32
 type 0:8:18-8:19 i32
 type 0:8:26-8:30 Handler
 type 0:8:41-8:44 Ref[List[i32]]
