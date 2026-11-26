@@ -4,6 +4,10 @@ eider-analyzer's versions. It ships with the Eider toolchain: its MAJOR.MINOR is
 toolchain's (eider-lang's `VERSION`), its PATCH its own; before 1.0 a MINOR may break
 compatibility. The release process is eider-lang's `docs/site/tooling/releases.md`.
 
+## 0.7.5
+
+For Eider 0.7.10. The analyzer links the toolchain's checker, so it now has the 0.7.10 fixes: a `break` or `continue` after a closure that holds a closure, inside a loop, no longer crashes the checker (eider-lang#248), and the E0601 help for a record that holds a `sync.Lock` or `Chan` says how to change one field (#214). eider.lock names the 0.7.10 compiler package. No protocol change.
+
 ## 0.7.4
 
 For Eider 0.7.7. The E0308 case of tests/fixtures/codes.ei uses `List[String]`, since a `let` of an integer place now copies (eider-lang#183). No server change.
